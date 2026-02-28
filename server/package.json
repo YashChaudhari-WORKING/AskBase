@@ -1,0 +1,14 @@
+{
+  "name": "rag-engine-server",
+  "version": "1.0.0",
+  "description": "Production RAG Engine API — retrieval augmented generation service",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "test": "jest --passWithNoTests"
+  },
+  "keywords": ["rag", "ai", "chatbot", "retrieval-augmented-generation"],
+  "author": "",
+  "license": "MIT"
+}

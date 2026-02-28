@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+
+# Environment
+.env
+.env.local
+.env.production
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Uploads (user files)
+uploads/*
+!uploads/.gitkeep
+
+# Build
+dist/
+build/
+
+# Coverage
+coverage/
+
+# Temp files
+*.tmp
+*.temp
+
+RAGPlan
