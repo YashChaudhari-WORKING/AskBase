@@ -30,21 +30,10 @@ const parseDocx = async (filePath) => {
 };
 
 const parsePdf = async (filePath) => {
-  const { LlamaParseReader } = await import("llamaindex");
-  const { llamaParseApiKey } = require("../../../config/env");
-
-  if (!llamaParseApiKey) {
-    throw new AppError("LLAMAPARSE_API_KEY is not configured", 500);
-  }
-
-  const reader = new LlamaParseReader({
-    apiKey: llamaParseApiKey,
-    resultType: "markdown",
-  });
-
-  const documents = await reader.loadData(filePath);
-  const content = documents.map((doc) => doc.text).join("\n\n");
-  return content;
+  const pdfParse = require("pdf-parse");
+  const buffer = await fs.readFile(filePath);
+  const data = await pdfParse(buffer);
+  return data.text;
 };
 
 const normalize = (text) => {
