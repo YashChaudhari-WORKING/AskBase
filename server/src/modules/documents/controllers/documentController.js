@@ -9,12 +9,17 @@ const uploadDocument = async (req, res, next) => {
       throw new AppError("No file uploaded", 400);
     }
 
+    const chunkOptions = {};
+    if (req.body.maxTokens) chunkOptions.maxTokens = parseInt(req.body.maxTokens);
+    if (req.body.minTokens) chunkOptions.minTokens = parseInt(req.body.minTokens);
+    if (req.body.overlap) chunkOptions.overlap = parseInt(req.body.overlap);
+
     const doc = await ingestDocument(req.file.path, {
       filename: req.file.filename,
       originalName: req.file.originalname,
       mimeType: req.file.mimetype,
       size: req.file.size,
-    });
+    }, chunkOptions);
 
     res.status(201).json({
       success: true,

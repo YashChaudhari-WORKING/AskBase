@@ -5,7 +5,7 @@ const Document = require("../models/Document");
 const Chunk = require("../../knowledgebase/models/Chunk");
 const logger = require("../../../common/utils/logger");
 
-const ingestDocument = async (filePath, fileInfo) => {
+const ingestDocument = async (filePath, fileInfo, chunkOptions = {}) => {
   const doc = await Document.create({
     filename: fileInfo.filename,
     originalName: fileInfo.originalName,
@@ -19,7 +19,7 @@ const ingestDocument = async (filePath, fileInfo) => {
 
     const parsed = await parseDocument(filePath);
 
-    const chunks = chunkText(parsed.content);
+    const chunks = chunkText(parsed.content, chunkOptions);
 
     if (chunks.length === 0) {
       doc.status = "completed";

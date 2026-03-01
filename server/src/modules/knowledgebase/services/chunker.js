@@ -1,10 +1,11 @@
 const logger = require("../../../common/utils/logger");
+const env = require("../../../config/env");
 
-const DEFAULT_OPTIONS = {
-  maxTokens: 512,
-  minTokens: 50,
-  overlap: 50,
-};
+const getDefaults = () => ({
+  maxTokens: env.chunkMaxTokens,
+  minTokens: env.chunkMinTokens,
+  overlap: env.chunkOverlap,
+});
 
 const estimateTokens = (text) => Math.ceil(text.split(/\s+/).length * 1.3);
 
@@ -67,7 +68,7 @@ const splitWithOverlap = (text, options) => {
 };
 
 const chunkText = (text, options = {}) => {
-  const opts = { ...DEFAULT_OPTIONS, ...options };
+  const opts = { ...getDefaults(), ...options };
 
   logger.info("Starting chunking", {
     textLength: text.length,
