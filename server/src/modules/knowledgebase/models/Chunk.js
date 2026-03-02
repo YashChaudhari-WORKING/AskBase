@@ -25,5 +25,9 @@ const chunkSchema = new mongoose.Schema(
 );
 
 chunkSchema.index({ documentId: 1, index: 1 });
+chunkSchema.index(
+  { text: "text", heading: "text", "metadata.keywords": "text" },
+  { weights: { text: 1, heading: 2, "metadata.keywords": 3 }, name: "chunk_text_search" }
+);
 
 module.exports = mongoose.model("Chunk", chunkSchema);

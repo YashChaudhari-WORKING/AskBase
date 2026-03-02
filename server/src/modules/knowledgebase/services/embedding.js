@@ -4,7 +4,8 @@ const logger = require("../../../common/utils/logger");
 
 const VOYAGE_API_URL = "https://api.voyageai.com/v1/embeddings";
 const MODEL = "voyage-3-lite";
-const BATCH_SIZE = 20;
+const BATCH_SIZE = 5;
+const MAX_RETRIES = 3;
 
 const embedSingle = async (text) => {
   const results = await embedBatch([text]);
@@ -26,26 +27,42 @@ const embedBatch = async (texts) => {
       total: texts.length,
     });
 
-    const response = await fetch(VOYAGE_API_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${voyageApiKey}`,
-      },
-      body: JSON.stringify({
-        input: batch,
-        model: MODEL,
-      }),
-    });
+    let lastError;
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      const response = await fetch(VOYAGE_API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${voyageApiKey}`,
+        },
+        body: JSON.stringify({
+          input: batch,
+          model: MODEL,
+        }),
+      });
 
-    if (!response.ok) {
-      const error = await response.text();
-      throw new AppError(`Voyage AI API error: ${error}`, 502);
+      if (response.ok) {
+        const data = await response.json();
+        const embeddings = data.data.map((item) => item.embedding);
+        allEmbeddings.push(...embeddings);
+        lastError = null;
+        break;
+      }
+
+      lastError = await response.text();
+      if (response.status === 429 && attempt < MAX_RETRIES) {
+        const wait = attempt * 20000;
+        logger.warn("Rate limited, retrying", { attempt, waitMs: wait });
+        await new Promise((r) => setTimeout(r, wait));
+      } else {
+        throw new AppError(`Voyage AI API error: ${lastError}`, 502);
+      }
     }
 
-    const data = await response.json();
-    const embeddings = data.data.map((item) => item.embedding);
-    allEmbeddings.push(...embeddings);
+    // delay between batches to stay within free tier RPM
+    if (i + BATCH_SIZE < texts.length) {
+      await new Promise((r) => setTimeout(r, 21000));
+    }
   }
 
   logger.info("Embedding complete", {
