@@ -4,7 +4,8 @@ dotenv.config();
 module.exports = {
   port: process.env.PORT || 5000,
   mongoUri: process.env.MONGO_URI,
-  groqApiKey: process.env.GROQ_API_KEY,
+  groqChatApiKey: process.env.GROQ_CHAT_API_KEY,
+  groqEnrichApiKey: process.env.GROQ_ENRICH_API_KEY,
   voyageApiKey: process.env.VOYAGE_API_KEY,
   nodeEnv: process.env.NODE_ENV || "development",
   chunkMaxTokens: parseInt(process.env.CHUNK_MAX_TOKENS) || 512,

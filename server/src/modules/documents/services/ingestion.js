@@ -1,6 +1,8 @@
 const { parseDocument } = require("./parser");
 const { chunkText } = require("../../knowledgebase/services/chunker");
 const { embedBatch } = require("../../knowledgebase/services/embedding");
+const { enrichBatch } = require("../../knowledgebase/services/enrichment");
+const { groqEnrichApiKey } = require("../../../config/env");
 const Document = require("../models/Document");
 const Chunk = require("../../knowledgebase/models/Chunk");
 const logger = require("../../../common/utils/logger");
@@ -31,6 +33,13 @@ const ingestDocument = async (filePath, fileInfo, chunkOptions = {}) => {
     const texts = chunks.map((c) => c.text);
     const embeddings = await embedBatch(texts);
 
+    // enrich chunks with Groq metadata if API key is configured
+    let enrichments = null;
+    if (groqEnrichApiKey) {
+      logger.info("Starting metadata enrichment", { chunks: chunks.length });
+      enrichments = await enrichBatch(chunks);
+    }
+
     const chunkDocs = chunks.map((chunk, i) => ({
       documentId: doc._id,
       text: chunk.text,
@@ -41,6 +50,7 @@ const ingestDocument = async (filePath, fileInfo, chunkOptions = {}) => {
       metadata: {
         source: parsed.metadata.source,
         type: parsed.metadata.type,
+        ...(enrichments?.[i] || {}),
       },
     }));
 
