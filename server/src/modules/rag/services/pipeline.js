@@ -4,6 +4,7 @@ const { hybridSearch } = require("../../knowledgebase/services/retrieval");
 const { rerank } = require("./reranker");
 const { buildContext } = require("./contextBuilder");
 const { generate } = require("./generator");
+const { validate } = require("./validator");
 const logger = require("../../../common/utils/logger");
 
 const ask = async (query, options = {}) => {
@@ -58,14 +59,20 @@ const ask = async (query, options = {}) => {
   // Step 7: Generate answer with Groq
   const answer = await generate(query, context);
 
+  // Step 8: Validate answer (groundedness, relevance, confidence)
+  const validation = await validate(query, answer, context);
+
   logger.info("RAG pipeline complete", {
     sources: sources.length,
     answerLength: answer.length,
+    grounded: validation.grounded,
+    confidence: validation.confidence,
   });
 
   return {
     answer,
     sources,
+    validation,
     meta: {
       originalQuery: query,
       rewrittenQuery,
