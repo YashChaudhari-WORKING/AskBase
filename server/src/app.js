@@ -4,6 +4,7 @@ const helmet = require("helmet");
 const errorHandler = require("./common/middleware/errorHandler");
 const documentRoutes = require("./modules/documents/routes/documentRoutes");
 const searchRoutes = require("./modules/knowledgebase/routes/searchRoutes");
+const chatRoutes = require("./modules/chat/routes/chatRoutes");
 
 const app = express();
 
@@ -17,6 +18,7 @@ app.get("/health", (req, res) => {
 
 app.use("/api/documents", documentRoutes);
 app.use("/api/knowledgebase", searchRoutes);
+app.use("/api/chat", chatRoutes);
 
 app.use(errorHandler);
 
