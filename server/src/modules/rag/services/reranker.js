@@ -36,8 +36,14 @@ const rerank = async (query, chunks, topK = 5) => {
   }
 
   const data = await response.json();
+  const results = data.data || data.results;
 
-  const reranked = data.results.map((result) => ({
+  if (!results || !Array.isArray(results)) {
+    logger.error("Unexpected rerank response", { keys: Object.keys(data) });
+    return chunks.slice(0, topK).map((c) => ({ ...c, relevanceScore: 0 }));
+  }
+
+  const reranked = results.map((result) => ({
     ...chunks[result.index],
     relevanceScore: result.relevance_score,
   }));
