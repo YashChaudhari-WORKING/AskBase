@@ -7,7 +7,7 @@ export async function sendVerificationEmail(to: string, firstName: string, token
     return;
   }
 
-  const verifyUrl = `${env.FRONTEND_URL}/auth/verify-email?token=${token}`;
+  const verifyUrl = `${env.FRONTEND_URL}/verify-email?token=${token}`;
 
   await axios.post(
     "https://api.brevo.com/v3/smtp/email",
