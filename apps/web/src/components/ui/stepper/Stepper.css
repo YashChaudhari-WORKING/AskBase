@@ -1,0 +1,148 @@
+.stepper-outer {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.step-circle-container {
+  width: 100%;
+  border-radius: 1.25rem;
+  border: 1px solid var(--border);
+  background: var(--card);
+  box-shadow: 0 4px 24px 0 rgba(0,0,0,0.06);
+}
+
+.step-indicator-row {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  padding: 1.25rem 1.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.step-content-default {
+  position: relative;
+  overflow: hidden;
+}
+
+.step-default {
+  padding: 1.75rem 2rem;
+}
+
+.footer-container {
+  padding: 1rem 2rem 1.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.footer-nav {
+  display: flex;
+  align-items: center;
+}
+
+.footer-nav.spread {
+  justify-content: space-between;
+}
+
+.footer-nav.end {
+  justify-content: flex-end;
+}
+
+.back-button {
+  transition: color 200ms;
+  border-radius: 0.5rem;
+  padding: 0.375rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--muted-foreground);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+.back-button:hover {
+  color: var(--foreground);
+}
+
+.next-button {
+  transition: opacity 200ms;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  border-radius: 9999px;
+  background-color: var(--primary);
+  color: var(--primary-foreground);
+  font-weight: 500;
+  font-size: 0.875rem;
+  padding: 0.5rem 1.5rem;
+  border: none;
+  cursor: pointer;
+}
+
+.next-button:hover {
+  opacity: 0.9;
+}
+
+.next-button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.step-indicator {
+  position: relative;
+  cursor: default;
+  outline: none;
+  flex-shrink: 0;
+}
+
+.step-indicator-inner {
+  display: flex;
+  height: 2rem;
+  width: 2rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  font-weight: 600;
+  font-size: 0.8125rem;
+  transition: background-color 0.25s, color 0.25s;
+}
+
+.step-indicator-inner.inactive {
+  background-color: var(--muted);
+  color: var(--muted-foreground);
+}
+
+.step-indicator-inner.active {
+  background-color: var(--primary);
+  color: var(--primary-foreground);
+}
+
+.step-indicator-inner.complete {
+  background-color: var(--primary);
+  color: var(--primary-foreground);
+}
+
+.step-connector {
+  position: relative;
+  margin-left: 0.625rem;
+  margin-right: 0.625rem;
+  height: 2px;
+  flex: 1;
+  overflow: hidden;
+  border-radius: 9999px;
+  background-color: var(--border);
+}
+
+.step-connector-inner {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  background-color: var(--primary);
+  border-radius: 9999px;
+}
+
+.check-icon {
+  height: 0.875rem;
+  width: 0.875rem;
+}

@@ -1,0 +1,26 @@
+{
+  "name": "@askbase/widget",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "dev": "vite --port 5173",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "socket.io-client": "^4.8.1",
+    "axios": "^1.7.9",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.474.0"
+  },
+  "devDependencies": {
+    "@askbase/config": "workspace:*",
+    "@types/react": "^19.0.4",
+    "@types/react-dom": "^19.0.2",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.7"
+  }
+}

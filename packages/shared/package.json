@@ -1,0 +1,13 @@
+{
+  "name": "@askbase/shared",
+  "version": "0.0.1",
+  "private": true,
+  "main": "./src/index.ts",
+  "dependencies": {
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@askbase/config": "workspace:*",
+    "typescript": "^5.7.2"
+  }
+}

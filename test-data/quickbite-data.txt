@@ -1,0 +1,178 @@
+QuickBite Internal Knowledge Base — Support & Operations
+Last updated: March 2025
+Compiled by: Customer Experience Team, Ops Team, Finance Team
+
+---
+
+SECTION 1: REFUND POLICY
+
+Refunds at QuickBite are handled differently depending on who is at fault. If the restaurant cancels the order, the customer gets a full refund within 5-7 business days to their original payment method. If the customer cancels before the restaurant accepts, they get a full refund. If the customer cancels after the restaurant has accepted but before the delivery partner picks up, a 30% cancellation fee is charged and 70% is refunded. If the customer cancels after the delivery partner has picked up the order, no refund is given.
+
+For damaged or wrong items, refund is processed only if the customer reports within 1 hour of delivery and provides a photo. Partial wrong orders get partial refund. Fully wrong orders get full refund. Cold food is generally not eligible for refund unless temperature-sensitive items like ice cream were delivered melted, in which case 50% refund is given as QuickBite credits only, not cash.
+
+Refund timelines:
+- UPI payments: 2-3 business days
+- Credit/Debit card: 5-7 business days
+- Net banking: 3-5 business days
+- QuickBite wallet: instant
+- Cash on delivery: QuickBite credits only (no cash refund ever for COD orders)
+
+Note: During festival seasons (Diwali, Holi, New Year), refund processing may take an additional 2-3 days due to high volume.
+
+---
+
+SECTION 2: DELIVERY PARTNER BEHAVIOR COMPLAINTS
+
+If a customer complains about delivery partner behavior, the complaint must be escalated to the safety team within 2 hours. Complaints fall into three categories:
+
+Category A (Minor): Rude behavior, no helmet, wrong route. Action: Warning issued to partner, 50 QuickBite coins given to customer.
+
+Category B (Moderate): Food tampered with, late without informing, phone not reachable for more than 20 minutes. Action: Partner suspended for 3 days, full refund given to customer.
+
+Category C (Severe): Harassment, theft, accident. Action: Partner account permanently deactivated, FIR support provided if requested, customer gets full refund plus Rs 200 safety credit.
+
+Delivery partners are independent contractors, not QuickBite employees. QuickBite is not legally liable for partner behavior but handles all complaints as per the above policy for customer trust.
+
+---
+
+SECTION 3: RESTAURANT PARTNER ONBOARDING
+
+To onboard a new restaurant on QuickBite, the restaurant owner must submit:
+1. FSSAI license (valid, not expired)
+2. GST certificate (if annual turnover > Rs 20 lakhs)
+3. PAN card of owner
+4. Bank account details (cancelled cheque)
+5. Menu with photos (minimum 5 items, maximum 200 items at launch)
+6. Restaurant photos (exterior + kitchen, minimum 3 photos)
+
+Onboarding takes 7-10 working days. Restaurants in Tier 1 cities (Mumbai, Delhi, Bengaluru, Hyderabad, Chennai, Pune) get priority onboarding in 3-5 days if documents are complete.
+
+Commission structure:
+- Tier 1 cities: 25% commission on order value (excluding taxes)
+- Tier 2 cities: 20% commission
+- Tier 3 and below: 18% commission
+- Cloud kitchens get flat 28% regardless of city tier
+
+Restaurants get paid every Tuesday and Friday for orders completed in the previous cycle. Minimum payout threshold is Rs 500. If earnings are below Rs 500, it rolls over to the next cycle.
+
+Restaurants can pause their listing anytime from the partner app. If a restaurant is paused for more than 30 consecutive days without reason, QuickBite may delist them.
+
+---
+
+SECTION 4: SUBSCRIPTION — QUICKBITE PRIME
+
+QuickBite Prime costs Rs 149/month or Rs 999/year. Benefits include:
+- Free delivery on orders above Rs 149 (normally free delivery threshold is Rs 299)
+- 1 free cancellation per month without penalty
+- Priority customer support (response within 10 minutes vs 30 minutes for non-Prime)
+- 10% extra cashback on QuickBite wallet payments
+- Early access to new restaurant launches
+
+Prime does NOT cover:
+- Surge pricing during rain or peak hours (surge still applies)
+- Alcohol orders (separate delivery fee always applies)
+- Orders from non-Prime eligible restaurants (some small restaurants opt out)
+- Orders below Rs 99
+
+Cancellation of Prime: Customer can cancel anytime. No refund for unused days if monthly plan. Annual plan gets prorated refund if cancelled within first 30 days only.
+
+Family Prime: One account can add up to 4 family members. Each member gets full Prime benefits. Additional Rs 49/month per member added.
+
+---
+
+SECTION 5: SURGE PRICING
+
+QuickBite uses dynamic pricing during high demand. Surge pricing is applied when:
+- Weather conditions (rain, storm) — surge up to 2x delivery fee
+- Peak hours (12pm-2pm and 7pm-10pm on weekdays, all day Sunday) — surge up to 1.5x
+- Festivals and holidays — surge up to 2.5x
+- Low delivery partner availability in an area — surge up to 3x
+
+Surge is shown clearly before checkout. Customers can wait or choose to pay. Surge does not apply to Prime members for weather-related surges only. Peak hour and festival surges apply to everyone including Prime members.
+
+Surge revenue split: 80% goes to the delivery partner, 20% retained by QuickBite. This is different from regular delivery fee where split is 70-30.
+
+---
+
+SECTION 6: QUICKBITE WALLET & COINS
+
+QuickBite Wallet: Real money stored in app. Can be loaded via UPI, netbanking, cards. Used for payments. Refunds to wallet are instant. Maximum balance Rs 10,000 as per RBI guidelines. Wallet is non-transferable.
+
+QuickBite Coins: Loyalty points. 1 coin = Rs 0.10 value. Earned at rate of 5 coins per Rs 100 spent. Maximum 500 coins can be redeemed per order. Coins expire after 365 days of inactivity (no orders placed). Coins cannot be converted to cash or transferred.
+
+QuickBite Credits: Issued as compensation. Same as wallet money. Used automatically in next order. Valid for 90 days. Non-transferable.
+
+Common confusion: Coins and Credits are different. Credits are real compensation money. Coins are earned loyalty points. Both have different expiry and redemption rules.
+
+---
+
+SECTION 7: ACCOUNT & LOGIN ISSUES
+
+If customer cannot login:
+- OTP not received: Check if number is correct, wait 60 seconds before resending, check DND status (if DND is active, SMS OTP won't work, use WhatsApp OTP option)
+- Account blocked: Happens after 5 failed OTP attempts, unlocks automatically after 30 minutes
+- Account suspended: Usually due to fraudulent refund claims (3 or more in 30 days), chargeback filed with bank, or misuse of referral program. Suspended accounts need to email appeals@quickbite.in with explanation.
+- Phone number changed: Customer must contact support with old number, new number, and any recent order ID to verify identity.
+
+Deactivating account: Customer can request account deletion under Settings > Privacy > Delete Account. All data deleted within 30 days as per IT Act. Wallet balance must be withdrawn before deletion — it cannot be refunded after account is deleted.
+
+---
+
+SECTION 8: SPECIAL SCENARIOS AND EDGE CASES
+
+Scenario: Customer placed order, paid, but order never appeared in restaurant's system.
+Cause: Usually a network timeout during order confirmation. Payment is deducted but order fails.
+Resolution: Auto-detected within 15 minutes and full refund initiated. If not auto-detected, customer should contact support with payment screenshot. Do not ask them to reorder until refund is confirmed.
+
+Scenario: Delivery partner marked order as delivered but customer didn't receive it.
+Resolution: Check GPS data of partner. If GPS shows partner never reached customer location, full refund. If GPS shows partner was at location, investigate further — call partner, check with security of building if applicable. Decision made within 24 hours.
+
+Scenario: Customer received order then claimed not received to get refund (fraud).
+Detection: GPS + partner confirmation + repeat behavior check. If fraud detected, account flagged. Third incident = permanent suspension.
+
+Scenario: Restaurant closed but order accepted (system glitch).
+Resolution: Full refund + Rs 50 credit for inconvenience. Escalate to restaurant team to fix operating hours.
+
+Scenario: Customer allergic reaction after eating food.
+Escalate immediately to safety team. Do not promise refund first — prioritize customer wellbeing. Collect details: what was ordered, what time, symptoms. Connect with restaurant for ingredient information. Full refund given regardless. Document for food safety audit.
+
+---
+
+SECTION 9: QUICKBITE FOR BUSINESS (QB CORPORATE)
+
+Companies can open a corporate account for employee meal benefits. Minimum 10 employees required. Company gets a monthly invoice instead of per-transaction payments.
+
+Corporate accounts get:
+- 15% discount on all orders (not stackable with other offers)
+- Dedicated account manager
+- Monthly spending reports
+- Custom meal policies (e.g., max Rs 300 per meal, only lunch hours)
+- Option to restrict to healthy food restaurants only
+
+Payment: Corporate accounts pay via NEFT/RTGS only, no UPI or cards accepted for invoicing. Credit period of 30 days. Late payment attracts 18% per annum interest.
+
+---
+
+SECTION 10: ALCOHOL DELIVERY (SELECT CITIES)
+
+QuickBite delivers alcohol in Bengaluru, Mumbai, Hyderabad, and Gurgaon only. Age verification mandatory — delivery partner checks government ID at door. If customer not available or cannot show ID, order is returned and no refund given.
+
+Alcohol orders cannot be:
+- Ordered after 11 PM (local excise rules)
+- Delivered to areas within 500m of schools, religious places, or dry areas
+- Ordered using QuickBite credits or coins (cash/card/wallet only)
+- Returned or refunded once delivered (excise rules)
+
+Surge pricing on alcohol capped at 1.5x regardless of demand.
+
+---
+
+SECTION 11: GRIEVANCE OFFICER
+
+As per Consumer Protection (E-Commerce) Rules 2020, QuickBite's Grievance Officer is:
+Name: Priya Nair
+Email: grievance@quickbite.in
+Phone: 1800-XXX-XXXX (toll free, 9am-6pm weekdays)
+Response time: Within 48 hours of complaint
+
+If not resolved within 30 days, customers can approach the National Consumer Disputes Redressal Commission (NCDRC) or file complaint on consumerhelpline.gov.in (National Consumer Helpline, 1800-11-4000).

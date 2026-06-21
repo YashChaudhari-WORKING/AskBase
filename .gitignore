@@ -1,19 +1,43 @@
 # Dependencies
 node_modules/
+.pnpm-store/
 
-# Environment
+# Build outputs
+dist/
+.next/
+out/
+build/
+.turbo/
+
+# Environment — never commit secrets
 .env
 .env.local
+.env.*.local
+.env.development
 .env.production
 
-# Logs
-logs/
-*.log
-npm-debug.log*
+# Claude Code — internal memory and config
+.claude/
+CLAUDE.md
+BUILD_PLAN.md
+WIZARD_PLAN.md
+ONBOARDING.md
+PRODUCT.md
 
-# OS files
+# Dev/test scripts
+test-prompt.mjs
+test-widget.html
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+pnpm-debug.log*
+
+# OS
 .DS_Store
 Thumbs.db
+desktop.ini
 
 # IDE
 .vscode/
@@ -21,19 +45,23 @@ Thumbs.db
 *.swp
 *.swo
 
-# Uploads (user files)
-uploads/*
-!uploads/.gitkeep
+# Uploads & user data
+uploads/
+*.pdf
 
-# Build
-dist/
-build/
+# Database
+drizzle/meta/
+*.sqlite
+*.db
 
-# Coverage
+# TypeScript
+*.tsbuildinfo
+
+# Test coverage
 coverage/
+.nyc_output/
 
-# Temp files
-*.tmp
-*.temp
-
-RAGPlan
+# Misc
+.cache/
+tmp/
+temp/
