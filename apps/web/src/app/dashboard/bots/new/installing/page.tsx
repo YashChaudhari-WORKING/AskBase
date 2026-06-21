@@ -280,7 +280,7 @@ export default function InstallingPage() {
         if (hasAutoFlow) {
           try {
             const flowRes = await api.post("/flows", {
-              label: "Lead capture",
+              name: "Lead capture",
               fields: [
                 { key: "name",    label: "Your name",     type: "text",     required: true  },
                 { key: "email",   label: "Email address", type: "email",    required: true  },
