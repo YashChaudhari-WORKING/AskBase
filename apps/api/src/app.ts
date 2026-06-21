@@ -81,4 +81,29 @@ app.use("/api/team", teamRoutes);
 app.use(notFound);
 app.use(errorHandler);
 
+if (process.env.NODE_ENV !== "production") {
+  const routes = [
+    "POST   /api/auth/register",
+    "POST   /api/auth/login",
+    "POST   /api/auth/logout",
+    "GET    /api/auth/me",
+    "GET    /api/auth/verify-email",
+    "POST   /api/auth/refresh",
+    "GET    /api/knowledge/*",
+    "POST   /api/knowledge/*",
+    "GET    /api/chat/*",
+    "POST   /api/chat/*",
+    "GET    /api/analytics/*",
+    "GET    /api/agents/*",
+    "POST   /api/agents/*",
+    "GET    /api/flows/*",
+    "POST   /api/flows/*",
+    "GET    /api/keys/*",
+    "POST   /api/keys/*",
+    "GET    /api/team/*",
+    "GET    /api/widget-themes/*",
+  ];
+  logger.info(`\n  Routes registered:\n${routes.map(r => `    ${r}`).join("\n")}\n`);
+}
+
 export default app;

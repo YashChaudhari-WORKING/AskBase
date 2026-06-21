@@ -4,6 +4,7 @@ import { hashPassword, comparePassword } from "../../common/utils/hash";
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from "../../common/utils/jwt";
 import { isDisposableEmail } from "../../common/utils/disposable-emails";
 import { sendVerificationEmail } from "../../common/utils/email";
+import { logger } from "../../common/utils/logger";
 import type { RegisterTenantInput, LoginInput } from "@askbase/shared";
 import { DEFAULT_THEMES } from "../widget-themes/default-themes";
 import { randomUUID } from "crypto";
@@ -43,7 +44,9 @@ export class AuthService {
       verificationTokenExpiresAt,
     }).returning();
 
-    await sendVerificationEmail(user.email, user.firstName, verificationToken);
+    sendVerificationEmail(user.email, user.firstName, verificationToken).catch((err) =>
+      logger.error({ err }, "Failed to send verification email")
+    );
 
     return { requiresVerification: true };
   }

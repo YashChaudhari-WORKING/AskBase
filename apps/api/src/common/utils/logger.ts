@@ -1,20 +1,20 @@
 import pino from "pino";
-import { env } from "../../config/env";
 
-const isDev = env.NODE_ENV !== "production";
+const isDev = process.env.NODE_ENV !== "production";
 
-export const logger = pino({
-  level: isDev ? "info" : "info",
-  ...(isDev && {
-    transport: {
-      target: "pino-pretty",
-      options: {
-        colorize: true,
-        translateTime: "HH:MM:ss",
-        ignore: "pid,hostname,req,res,responseTime,port,env,ms",
-        messageFormat: "{msg}",
-        singleLine: true,
-      },
-    },
-  }),
-});
+export const logger = pino(
+  { level: "info" },
+  isDev
+    ? pino.transport({
+        target: "pino-pretty",
+        options: {
+          colorize: true,
+          translateTime: "HH:MM:ss",
+          ignore: "pid,hostname,req,res,responseTime",
+          messageFormat: "{msg}",
+          singleLine: true,
+          levelFirst: false,
+        },
+      })
+    : pino.destination(1)
+);
