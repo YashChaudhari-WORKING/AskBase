@@ -12,9 +12,11 @@ build/
 # Environment — never commit secrets
 .env
 .env.local
+.env.example
 .env.*.local
 .env.development
 .env.production
+railway.env.json
 
 # Claude Code — internal memory and config
 .claude/
