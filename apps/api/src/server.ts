@@ -85,8 +85,8 @@ io.on("connection", (socket) => {
 
 export { io };
 
-const PORT = parseInt(env.PORT, 10);
-server.listen(PORT, () => {
+const PORT = parseInt(process.env.PORT ?? env.PORT, 10);
+server.listen(PORT, "0.0.0.0", () => {
   logger.info({ port: PORT, env: env.NODE_ENV }, "AskBase API server started");
   startIngestionWorker();
 });
