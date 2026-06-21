@@ -41,11 +41,16 @@ export default function AiDescribePage() {
     setError(null);
     try {
       ctx.setDescription(trimmed);
-      const res = await api.post("/projects/generate-config", { description: trimmed });
+      let goal: string | null = null;
+      try { goal = sessionStorage.getItem("askbase_goal"); } catch {}
+      const res = await api.post("/projects/generate-config", { description: trimmed, goal });
       const raw = res.data?.data ?? res.data;
+      // If user picked Flow card, force flow mode regardless of AI classification
+      const forcedMode = goal === "flow" ? "flow" : (raw.primaryMode === "ai" ? "ai_agent" : raw.primaryMode);
       ctx.setConfig({
         ...raw,
-        primaryMode: raw.primaryMode === "ai" ? "ai_agent" : raw.primaryMode,
+        primaryMode: forcedMode,
+        assistantType: goal === "flow" ? "flow" : (raw.assistantType ?? raw.primaryMode),
       });
       router.push("/dashboard/bots/new/build");
     } catch (err: any) {

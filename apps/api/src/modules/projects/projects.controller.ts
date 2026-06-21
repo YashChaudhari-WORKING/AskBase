@@ -318,17 +318,21 @@ Write ONLY the system prompt text, no preamble or explanation. Maximum 250 words
 // ── Generate full assistant config from description (v2) ───
 // Supports refinement loop: pass previousConfig + refinement to adjust.
 export async function generateConfig(req: AuthRequest, res: Response) {
-  const { description, refinement, previousConfig } = req.body;
+  const { description, refinement, previousConfig, goal } = req.body;
   if (!description?.trim()) return error(res, "Description required", 400);
 
   const refinementBlock = refinement?.trim() && previousConfig
     ? `\n\nThe user previously got this config:\n${JSON.stringify(previousConfig, null, 2)}\n\nThey want to refine it with this feedback: "${refinement}"\n\nUpdate the config to reflect their feedback. Keep fields they didn't mention. Adjust intents, fields, prompt, tone, etc. as needed.\n`
     : "";
 
+  const modeOverride = goal === "flow"
+    ? `\n\nIMPORTANT: The user explicitly chose "Flow Bot" mode. You MUST set primaryMode = "flow" and assistantType = "flow". Do NOT set ai or hybrid.\n\nFLOW TRIGGER RULES — triggers are the ONLY routing mechanism, there is no AI fallback:\n- Each intent MUST have 6-8 triggers\n- Cover all realistic visitor phrasings: exact keywords, full questions, casual asks, urgent variants\n- Example for "Book Appointment": ["book appointment", "schedule a visit", "I want to come in", "can I book a time?", "how do I schedule?", "make an appointment", "set up a meeting"]\n- Vague single-word triggers will miss real visitors — be specific and varied\n`
+    : "";
+
   const promptText = `You are an expert product manager designing AI assistant configurations for a SaaS product.
 
 A user described their assistant as: "${description}"
-${refinementBlock}
+${refinementBlock}${modeOverride}
 Return a JSON object with EXACTLY these fields:
 {
   "name": "short catchy assistant name (2-3 words max)",
@@ -365,6 +369,12 @@ Return a JSON object with EXACTLY these fields:
   ],
   "suggestedQuickLinks": [
     { "label": "short label", "url": "" }
+  ],
+  "openingMessages": [
+    { "text": "proactive bubble message shown above launcher", "delaySeconds": 4 },
+    { "text": "second message", "delaySeconds": 12 },
+    { "text": "third message", "delaySeconds": 22 },
+    { "text": "fourth message — soft CTA to open chat", "delaySeconds": 35 }
   ],
   "reasoning": "1-2 sentences explaining WHY you chose this primaryMode and these intents",
   "confidence": "one of: high | low"
@@ -443,6 +453,26 @@ Each intent MUST have:
 - 4–6 per intent, varied in style: keyword, question, direct request, statement
 - Realistic phrasing — what a real visitor types, not marketing copy
 - Examples for "Request a Consultation": ["consultation", "I need expert advice", "how do I get started?", "can I speak to a specialist?", "book a meeting with your team"]
+
+---
+
+---
+
+## OPENING MESSAGES RULES (auto-trigger proactive bubbles for conversion)
+
+Generate exactly 4 messages shown above the chat launcher before the visitor opens it.
+These are the most important conversion lever — make them count.
+
+- Message 1 (delaySeconds: 4)  — warm, low-pressure opener. Make them curious. Max 10 words.
+- Message 2 (delaySeconds: 12) — specific value prop or social proof. Max 12 words.
+- Message 3 (delaySeconds: 22) — address a pain point or create mild urgency. Max 12 words.
+- Message 4 (delaySeconds: 35) — direct soft CTA inviting them to open the chat. Max 10 words.
+
+Rules:
+- Sound like a real human typed it, NOT a marketing bot
+- Be SPECIFIC to this business — never generic ("Hi there! Can I help you?")
+- Use 1 emoji max per message, naturally placed
+- Short and punchy — every word earns its place
 
 ---
 
@@ -1106,26 +1136,35 @@ export async function generateIntent(req: AuthRequest, res: Response) {
   const { description, botContext } = req.body;
   if (!description?.trim()) return error(res, "Description required", 400);
 
-  const promptText = `You are designing one capture flow for an AI assistant.
+  const promptText = `You are designing one capture flow for an AI assistant widget.
 
-${botContext ? `Bot context: "${botContext}"\n\n` : ""}The product owner wants to add this capability: "${description}"
+${botContext ? `Bot context: "${botContext}"\n\n` : ""}Capability to build: "${description}"
 
 Return ONLY a JSON object:
 {
-  "label": "short action name (2-4 words, e.g. 'Book a tour')",
-  "triggers": ["3-5 phrases a visitor would type — varied: keywords, questions, direct asks"],
-  "fields": [
-    { "key": "snake_case", "label": "Display Label", "type": "text|email|phone|date|number|longtext|select", "required": true, "options": [{"label":"...","value":"..."}] }
+  "label": "short action name (2-4 words, e.g. 'Book a demo')",
+  "triggers": [
+    "5-8 phrases — MUST cover all real ways a visitor would ask for this",
+    "Include: direct asks, questions, keywords, casual phrasing, urgent variants",
+    "e.g. for 'book demo': ['book a demo', 'schedule a call', 'I want to see the product', 'can I get a walkthrough', 'set up a meeting', 'talk to sales', 'request a demo']"
   ],
-  "successMessage": "shown after capture (max 20 words)"
+  "fields": [
+    { "key": "snake_case", "label": "Display Label", "type": "text|email|phone|date|number|longtext|select", "required": true }
+  ],
+  "successMessage": "Warm confirmation message, max 15 words"
 }
 
-Rules:
-- fields: MINIMAL. Only what's truly needed.
-- Use "select" when options are bounded. Always include options array for select.
-- Use "email"/"phone"/"date"/"number" for those specific types.
-- Use "longtext" for paragraph responses.
-- triggers: 3-5 realistic phrases visitors might type.
+Trigger rules — THIS IS CRITICAL:
+- 5 to 8 triggers minimum
+- Cover ALL intent variations: keywords, full questions, casual asks, urgent requests
+- Must feel like real visitor messages, NOT generic phrases
+- Include at least: 1 keyword, 2 questions, 2 direct requests, 1 casual variant
+- Be specific to the capability described — no generic filler
+
+Field rules:
+- MINIMAL fields only — never ask for more than needed
+- Use correct types: "email", "phone", "date", "number", "longtext", "select"
+- For "select" always include options array
 
 Return raw JSON only — no markdown, no explanation.`;
 
@@ -1165,21 +1204,21 @@ export async function generateTrigger(req: AuthRequest, res: Response) {
   const { flowName, flowDescription, botContext } = req.body;
   if (!flowName?.trim()) return error(res, "flowName required", 400);
 
-  const promptText = `You are configuring an AI assistant that uses flows to capture structured data from visitors.
+  const promptText = `You are configuring an AI chat widget that uses flows to capture visitor intent.
 
 Bot context: "${botContext ?? "General customer support assistant"}"
-
-The flow is called: "${flowName}"
+Flow name: "${flowName}"
 ${flowDescription ? `Flow description: "${flowDescription}"` : ""}
 
-Generate a trigger condition — a short description of user intents that should activate this flow.
-Write it as pipe-separated phrases (e.g. "user wants to book a demo | schedule a call | talk to sales").
+Generate 6-8 trigger phrases that would cause a visitor to invoke this flow.
+Format: pipe-separated phrases (e.g. "book a demo | schedule a call | I want to see the product | can I get a walkthrough | talk to sales | request a demo")
 
-Rules:
-- 3 to 5 distinct trigger phrases, separated by " | "
-- Be specific to the flow name and context
-- Use natural language a real visitor would type
-- Return ONLY the trigger string, nothing else`;
+Rules — CRITICAL:
+- 6 to 8 phrases minimum
+- Cover ALL ways a visitor might ask: keywords, questions, casual phrases, urgent requests
+- Each phrase must feel like something a real person would type in a chat box
+- Be very specific to "${flowName}" — avoid generic phrases unrelated to the flow
+- Return ONLY the pipe-separated string, nothing else, no quotes`;
 
   try {
     const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
@@ -1590,6 +1629,75 @@ function snakeCase(s: string): string {
 
 // ── Authenticated live preview (uses real pipeline, no API key needed) ───────
 const chatService = new ChatService();
+
+export async function generateOpeningMessages(req: AuthRequest, res: Response) {
+  const { botName, systemPrompt, primaryMode, goal } = req.body;
+  if (!botName?.trim()) return error(res, "botName required", 400);
+
+  const modeHint =
+    primaryMode === "flow" ? "lead capture / form bot" :
+    primaryMode === "hybrid" ? "hybrid AI + lead capture bot" :
+    "AI assistant";
+
+  const promptText = `You are a conversion rate optimization expert writing proactive chat widget messages.
+
+Business: "${botName}"
+Assistant type: ${modeHint}
+${systemPrompt ? `Context: "${systemPrompt.slice(0, 300)}"` : ""}
+${goal ? `Goal: ${goal}` : ""}
+
+Generate exactly 4 proactive messages shown above the chat launcher before the visitor opens the widget.
+These messages appear one after another with delays, designed to grab attention and drive the visitor to open the chat.
+
+Rules — CRITICAL for high conversion:
+- Each message must be SHORT (max 12 words), punchy, and feel human — not robotic
+- Message 1 (delay 4s): a warm, low-pressure opener — make them curious
+- Message 2 (delay 12s): a specific value proposition or social proof
+- Message 3 (delay 22s): create mild urgency or address a common pain point
+- Message 4 (delay 35s): a direct soft CTA — invite them to open the chat
+- Use emojis naturally (1 per message max)
+- Be specific to the business context — NO generic "Hi there! Can I help you?" fluff
+- Sound like a real person typed it, not a marketing bot
+
+Return ONLY valid JSON array, no markdown:
+[
+  { "text": "...", "delaySeconds": 4 },
+  { "text": "...", "delaySeconds": 12 },
+  { "text": "...", "delaySeconds": 22 },
+  { "text": "...", "delaySeconds": 35 }
+]`;
+
+  try {
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    const result = await model.generateContent({
+      contents: [{ role: "user", parts: [{ text: promptText }] }],
+      generationConfig: { temperature: 0.7, maxOutputTokens: 400, responseMimeType: "application/json" },
+    });
+    const messages = JSON.parse(result.response.text().trim());
+    return success(res, { openingMessages: messages });
+  } catch (geminiErr: any) {
+    if (groq) {
+      try {
+        const completion = await groq.chat.completions.create({
+          model: "llama-3.3-70b-versatile",
+          messages: [
+            { role: "system", content: "You are a JSON API. Return only valid JSON array, no markdown." },
+            { role: "user", content: promptText },
+          ],
+          temperature: 0.7,
+          max_tokens: 400,
+          response_format: { type: "json_object" },
+        });
+        const raw = JSON.parse(completion.choices[0].message.content ?? "{}");
+        const messages = Array.isArray(raw) ? raw : (raw.openingMessages ?? raw.messages ?? []);
+        return success(res, { openingMessages: messages });
+      } catch (groqErr: any) {
+        return error(res, `Groq fallback failed: ${groqErr.message}`, 500);
+      }
+    }
+    return error(res, geminiErr.message, 500);
+  }
+}
 
 export async function livePreview(req: AuthRequest, res: Response) {
   try {

@@ -206,11 +206,7 @@ export default function BotsPage() {
 
   const load = useCallback(async () => {
     const br = await api.get("/projects").catch(() => ({ data: { data: [] } }));
-    setBots(
-      (br.data.data ?? []).filter(
-        (b: Project) => (b.assistantType ?? "ai_agent") !== "flow"
-      )
-    );
+    setBots(br.data.data ?? []);
   }, []);
 
   useEffect(() => { load().finally(() => setLoading(false)); }, [load]);
@@ -227,14 +223,7 @@ export default function BotsPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">AI Assistants</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            {visibleBots.length} assistant{visibleBots.length !== 1 ? "s" : ""} · Flow Bots live on the{" "}
-            <button
-              type="button"
-              onClick={() => router.push("/dashboard/flows")}
-              className="text-foreground hover:underline cursor-pointer"
-            >
-              Flows page
-            </button>
+            {visibleBots.length} assistant{visibleBots.length !== 1 ? "s" : ""}
           </p>
         </div>
         <div className="flex items-center gap-2">

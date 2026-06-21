@@ -79,6 +79,7 @@ export interface GeneratedConfig {
   businessHoursText?: string
   conversationStarters?: Array<{ label: string; message: string }>
   widgetQuickReplies?: Array<{ label: string }>
+  openingMessages?: Array<{ text: string; delaySeconds: number }>
   kbHints?: string[]
 }
 

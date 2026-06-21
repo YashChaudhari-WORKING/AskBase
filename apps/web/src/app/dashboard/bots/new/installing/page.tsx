@@ -58,6 +58,7 @@ export default function InstallingPage() {
         businessHoursText?: string;
         conversationStarters?: Array<{ label: string; message: string }>;
         widgetQuickReplies?: Array<{ label: string }>;
+        openingMessages?: Array<{ text: string; delaySeconds: number }>;
       };
       intents?: { label: string; fields?: Array<{ key?: string; label?: string }> }[];
       flow?: { label: string; fields?: Array<{ key?: string; label?: string }> };
@@ -222,6 +223,7 @@ export default function InstallingPage() {
           if (c.businessHoursText)  contentPatch.businessHoursText  = c.businessHoursText;
           if (c.conversationStarters?.length) contentPatch.conversationStarters = c.conversationStarters;
           if (c.widgetQuickReplies?.length)   contentPatch.widgetQuickReplies   = c.widgetQuickReplies;
+          if (c.openingMessages?.length)      contentPatch.openingMessages      = c.openingMessages;
           if (Object.keys(contentPatch).length) {
             api.patch(`/projects/${projectId}`, contentPatch).catch(() => { /* non-fatal */ });
           }

@@ -7,7 +7,7 @@ import {
   deleteProject, hardDeleteProject, generatePrompt, generateConfig,
   generateIntent, generateTrigger, previewChat, initializeProject,
   generateFlowBot, initializeFlowBot, createFlowOnly, generateSetupGuide,
-  livePreview, regenerateKey,
+  generateOpeningMessages, livePreview, regenerateKey,
 } from "./projects.controller";
 
 const router = Router();
@@ -38,6 +38,7 @@ router.post("/initialize", requireRole("owner", "admin"), initializeProject);
 router.post("/initialize-flow", requireRole("owner", "admin"), initializeFlowBot);
 router.post("/create-flow-only", requireRole("owner", "admin"), createFlowOnly);
 router.post("/generate-setup-guide", generateSetupGuide);
+router.post("/generate-opening-messages", generateOpeningMessages);
 router.post("/:id/live-preview", livePreview);
 router.post("/:id/regenerate-key", requireRole("owner", "admin"), regenerateKey);
 

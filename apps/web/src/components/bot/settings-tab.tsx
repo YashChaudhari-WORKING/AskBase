@@ -264,6 +264,36 @@ export function SettingsTab({
         </div>
       </div>
 
+      {/* Fallback flow — only for flow bots */}
+      {bot.assistantType === "flow" && (
+        <div className="rounded-xl border border-border/60 bg-card overflow-hidden">
+          <div className="px-5 py-3 border-b border-border/40 bg-muted/20">
+            <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+              Fallback flow
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Triggered when no flow matches and agent is offline
+            </p>
+          </div>
+          <div className="px-5 py-4">
+            <select
+              value={bot.fallbackFlowId ?? ""}
+              onChange={async (e) => {
+                const val = e.target.value || null
+                await api.patch(`/projects/${bot.id}`, { fallbackFlowId: val })
+                onBotUpdate({ fallbackFlowId: val })
+              }}
+              className="w-full h-10 px-3 rounded-xl border border-border bg-card text-sm text-foreground outline-none focus:ring-2 focus:ring-primary/20"
+            >
+              <option value="">— System default (collect name &amp; email)</option>
+              {(bot.attachedFlows ?? []).map((f) => (
+                <option key={f.flowId} value={f.flowId}>{f.flowName}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      )}
+
       <Button
         onClick={save}
         disabled={saving}

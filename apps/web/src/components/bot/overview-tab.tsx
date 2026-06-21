@@ -30,8 +30,10 @@ export function OverviewTab({
   const colorCustomized = bot.primaryColor !== "#6366f1" || bot.widgetThemeId !== null
   const needsKb = bot.assistantType !== "flow"
 
+  const isFlow = bot.assistantType === "flow"
+
   const checks = [
-    { ok: systemPromptSet, label: "System prompt configured" },
+    ...(isFlow ? [] : [{ ok: systemPromptSet, label: "System prompt configured" }]),
     ...(needsKb ? [{ ok: kbAttached, label: "Knowledge base attached" }] : []),
     { ok: colorCustomized, label: "Widget appearance set" },
   ]
@@ -214,8 +216,8 @@ export function OverviewTab({
           </div>
         </div>
 
-        {/* System prompt */}
-        <div className="flex items-center gap-4 px-5 py-3.5 transition-colors hover:bg-accent/20">
+        {/* System prompt — hidden for flow-only bots */}
+        {!isFlow && <div className="flex items-center gap-4 px-5 py-3.5 transition-colors hover:bg-accent/20">
           <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
             systemPromptSet ? "bg-violet-500/10" : "bg-amber-500/10"
           }`}>
@@ -243,7 +245,7 @@ export function OverviewTab({
               Edit →
             </button>
           </div>
-        </div>
+        </div>}
 
         {/* Brand color */}
         <div className="flex items-center gap-4 px-5 py-3.5 transition-colors hover:bg-accent/20">

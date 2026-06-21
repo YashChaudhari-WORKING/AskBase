@@ -4,7 +4,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { RagService } from "../rag/rag.service";
 import { classifyIntent } from "./intent.service";
 import { embedQuery } from "../../common/utils/voyage";
-import { io } from "../../server";
+import { io, isAgentOnline } from "../../server";
 import { env } from "../../config/env";
 import type { SendMessageInput } from "@askbase/shared";
 
@@ -153,6 +153,8 @@ export class ChatService {
     let projectFlowTrigger: string | null = null;
     let projectFlowId: string | null = null;
     let projectAttachedFlows: Array<{ flowId: string; flowName: string; trigger: string }> = [];
+    let assistantType: string = "ai_agent";
+    let fallbackFlowId: string | null = null;
 
     if (projectId) {
       const [project] = await db
@@ -167,6 +169,8 @@ export class ChatService {
         projectFlowTrigger = project.flowTrigger ?? null;
         projectFlowId = project.flowId ?? null;
         projectAttachedFlows = Array.isArray(project.attachedFlows) ? project.attachedFlows as any[] : [];
+        assistantType = project.assistantType ?? "ai_agent";
+        fallbackFlowId = project.fallbackFlowId ?? null;
 
         // Scope retrieval to documents in the project's linked knowledge base
         if (project.knowledgeBaseId) {
@@ -188,6 +192,62 @@ export class ChatService {
         .limit(1);
       systemPrompt = config?.systemPrompt ?? null;
       confidenceThreshold = config?.confidenceThreshold ?? 0.35;
+    }
+
+    // ── Flow-only bot routing chain ──────────────────────────────────────────
+    if (assistantType === "flow") {
+      // 1. Agent online → hand off immediately
+      if (isAgentOnline(tenantId)) {
+        const [handoff] = await db.insert(handoffs).values({
+          conversationId,
+          reason: "Agent available — routing to live support",
+          status: "pending",
+        }).returning();
+        await db.update(conversations)
+          .set({ status: "assigned", updatedAt: new Date() })
+          .where(eq(conversations.id, conversationId));
+        const reply = "An agent is available right now! Connecting you…";
+        const [aiMsg] = await db.insert(messages).values({
+          conversationId, senderType: "ai", content: reply, confidenceScore: 1, isHandoffTrigger: true,
+        }).returning();
+        io.to(`tenant:${tenantId}`).emit("handoff:new", { handoffId: handoff.id, conversationId });
+        io.to(`conversation:${conversationId}`).emit("message:new", aiMsg);
+        return { message: aiMsg, conversationId, handoffTriggered: true };
+      }
+
+      // 2. Agent offline → try to match a configured flow by trigger
+      const userText = input.content.toLowerCase();
+      const matchedFlow = projectAttachedFlows.find((f) => {
+        const triggers = (f.trigger ?? "").split("|").map((t: string) => t.trim().toLowerCase()).filter(Boolean);
+        return triggers.some((t: string) => userText.includes(t));
+      }) ?? (projectFlowId ? { flowId: projectFlowId, flowName: "default", trigger: "" } : null);
+
+      if (matchedFlow) {
+        const [aiMsg] = await db.insert(messages).values({
+          conversationId, senderType: "ai", content: "__flow_trigger__", confidenceScore: 1,
+          metadata: { action: "invoke_flow", flowId: matchedFlow.flowId },
+        }).returning();
+        io.to(`conversation:${conversationId}`).emit("message:new", aiMsg);
+        return { message: aiMsg, conversationId, handoffTriggered: false, action: "invoke_flow", flowId: matchedFlow.flowId };
+      }
+
+      // 3. No flow matched → use configured fallback flow if set
+      if (fallbackFlowId) {
+        const [aiMsg] = await db.insert(messages).values({
+          conversationId, senderType: "ai", content: "__flow_trigger__", confidenceScore: 1,
+          metadata: { action: "invoke_flow", flowId: fallbackFlowId },
+        }).returning();
+        io.to(`conversation:${conversationId}`).emit("message:new", aiMsg);
+        return { message: aiMsg, conversationId, handoffTriggered: false, action: "invoke_flow", flowId: fallbackFlowId };
+      }
+
+      // 4. System fallback — collect visitor details
+      const fallbackReply = "I'd love to help! Our team is currently offline. Could you share your name, email, and what you need — we'll get back to you shortly.";
+      const [aiMsg] = await db.insert(messages).values({
+        conversationId, senderType: "ai", content: fallbackReply, confidenceScore: 1,
+      }).returning();
+      io.to(`conversation:${conversationId}`).emit("message:new", aiMsg);
+      return { message: aiMsg, conversationId, handoffTriggered: false };
     }
 
     // ── Intent classification ──────────────────────────────────────────
