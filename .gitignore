@@ -9,6 +9,10 @@ out/
 build/
 .turbo/
 
+# Exception: Next.js route named "build"
+!apps/web/src/app/**/build/
+!apps/web/src/app/**/build/page.tsx
+
 # Environment — never commit secrets
 .env
 .env.local
