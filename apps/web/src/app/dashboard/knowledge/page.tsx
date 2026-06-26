@@ -6,7 +6,7 @@ import api from "@/lib/api";
 import { toast } from "sonner";
 import {
   Plus, Loader2, CheckCircle, AlertCircle,
-  Trash2, BookOpen, FileText, Clock, ArrowRight,
+  Trash2, BookOpen, FileText, Clock, ArrowRight, FolderTree,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,8 @@ import {
   DialogDescription, DialogFooter, DialogClose,
 } from "@/components/ui/dialog";
 import { formatDistanceToNow } from "date-fns";
+import { usePageHeader } from "@/components/dashboard/page-header";
+import { PageHeaderBar } from "@/components/dashboard/page-header-bar";
 
 interface Project {
   id: string;
@@ -161,23 +163,29 @@ export default function KnowledgePage() {
   const totalDocs = projects.reduce((s, p) => s + p.documentCount, 0);
   const totalProcessing = projects.reduce((s, p) => s + p.processingCount, 0);
 
-  return (
-    <div className="p-8 max-w-7xl mx-auto">
-      {/* Header */}
-      <div className="flex items-start justify-between mb-8">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Knowledge Base</h1>
-          <p className="text-muted-foreground mt-1 text-sm">
-            {projects.length} project{projects.length !== 1 ? "s" : ""}
-            {totalDocs > 0 && ` · ${totalDocs} documents`}
-            {totalProcessing > 0 && ` · ${totalProcessing} processing`}
-          </p>
-        </div>
+  usePageHeader(
+    <PageHeaderBar
+      icon={BookOpen}
+      tone="blue"
+      title="Knowledge Base"
+      stats={[
+        { icon: FolderTree, value: projects.length, label: projects.length === 1 ? "project" : "projects" },
+        { icon: FileText, value: totalDocs, label: totalDocs === 1 ? "document" : "documents" },
+        ...(totalProcessing > 0
+          ? [{ icon: Loader2, value: totalProcessing, label: "processing", tone: "amber" as const }]
+          : []),
+      ]}
+      actions={
         <Button onClick={() => setCreateOpen(true)} className="gap-2">
           <Plus className="w-4 h-4" /> New Project
         </Button>
-      </div>
+      }
+    />,
+    [projects.length, totalDocs, totalProcessing],
+  );
 
+  return (
+    <div className="p-8 max-w-7xl mx-auto">
       {/* Grid */}
       {loading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

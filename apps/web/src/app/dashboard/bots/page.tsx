@@ -12,6 +12,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmbedModal } from "@/components/bot/embed-modal";
+import { usePageHeader } from "@/components/dashboard/page-header";
+import { PageHeaderBar } from "@/components/dashboard/page-header-bar";
 
 interface Project {
   id: string;
@@ -217,62 +219,65 @@ export default function BotsPage() {
     (b.description ?? "").toLowerCase().includes(search.toLowerCase())
   );
 
+  usePageHeader(
+    <PageHeaderBar
+      icon={Bot}
+      tone="blue"
+      title="Assistants"
+      stats={[{ icon: Bot, value: visibleBots.length, label: visibleBots.length === 1 ? "assistant" : "assistants" }]}
+      actions={
+        <>
+        {/* Active / All toggle */}
+        <div className="flex items-center h-9 rounded-lg border border-border bg-muted/40 p-0.5 gap-0.5">
+          <button
+            type="button"
+            onClick={() => setShowAll(false)}
+            className={`h-8 px-3 rounded-md text-xs font-semibold transition-all ${
+              !showAll
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Active
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowAll(true)}
+            className={`h-8 px-3 rounded-md text-xs font-semibold transition-all ${
+              showAll
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            All
+          </button>
+        </div>
+
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+          <Input
+            placeholder="Search assistants…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="pl-8 h-9 w-48 text-sm"
+          />
+          {search && (
+            <button onClick={() => setSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
+              <X className="w-3 h-3" />
+            </button>
+          )}
+        </div>
+        <Button onClick={() => router.push('/dashboard/bots/new')} className="gap-2">
+          <Plus className="w-4 h-4" /> New Assistant
+        </Button>
+        </>
+      }
+    />,
+    [visibleBots.length, search, showAll],
+  );
+
   return (
     <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">AI Assistants</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            {visibleBots.length} assistant{visibleBots.length !== 1 ? "s" : ""}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {/* Active / All toggle */}
-          <div className="flex items-center h-9 rounded-lg border border-border bg-muted/40 p-0.5 gap-0.5">
-            <button
-              type="button"
-              onClick={() => setShowAll(false)}
-              className={`h-8 px-3 rounded-md text-xs font-semibold transition-all ${
-                !showAll
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Active
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowAll(true)}
-              className={`h-8 px-3 rounded-md text-xs font-semibold transition-all ${
-                showAll
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              All
-            </button>
-          </div>
-
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
-            <Input
-              placeholder="Search assistants…"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="pl-8 h-9 w-48 text-sm"
-            />
-            {search && (
-              <button onClick={() => setSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
-                <X className="w-3 h-3" />
-              </button>
-            )}
-          </div>
-          <Button onClick={() => router.push('/dashboard/bots/new')} className="gap-2">
-            <Plus className="w-4 h-4" /> New Assistant
-          </Button>
-        </div>
-      </div>
-
       {loading ? (
         <div className="grid grid-cols-3 gap-3">
           {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-36 rounded-xl" />)}

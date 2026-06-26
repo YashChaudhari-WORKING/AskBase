@@ -19,6 +19,8 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { usePageHeader } from "@/components/dashboard/page-header";
+import { PageHeaderBar } from "@/components/dashboard/page-header-bar";
 
 interface Flow {
   id: string;
@@ -143,6 +145,40 @@ export default function FlowsPage() {
     (f.description ?? "").toLowerCase().includes(search.toLowerCase())
   );
 
+  usePageHeader(
+    <PageHeaderBar
+      icon={Workflow}
+      tone="violet"
+      title="Flows"
+      stats={[
+        { icon: GitBranch, value: flows.length, label: flows.length === 1 ? "flow" : "flows" },
+        { icon: Cpu, value: flows.filter((f) => f.isActive).length, label: "active", tone: "emerald" },
+      ]}
+      actions={
+        <>
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+          <Input
+            placeholder="Search flows…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="pl-8 h-9 w-48 text-sm"
+          />
+          {search && (
+            <button onClick={() => setSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
+              <X className="w-3 h-3" />
+            </button>
+          )}
+        </div>
+        <Button onClick={createNew} className="gap-2">
+          <Plus className="w-4 h-4" /> New Flow Bot
+        </Button>
+        </>
+      }
+    />,
+    [flows.length, search],
+  );
+
   return (
     <div className="p-6">
       {/* Delete confirmation dialog */}
@@ -180,34 +216,6 @@ export default function FlowsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Flows</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            {flows.length} flow{flows.length !== 1 ? "s" : ""} · Created automatically when you build a Flow Bot
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
-            <Input
-              placeholder="Search flows…"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="pl-8 h-9 w-48 text-sm"
-            />
-            {search && (
-              <button onClick={() => setSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
-                <X className="w-3 h-3" />
-              </button>
-            )}
-          </div>
-          <Button onClick={createNew} className="gap-2">
-            <Plus className="w-4 h-4" /> New Flow Bot
-          </Button>
-        </div>
-      </div>
 
       {loading ? (
         <div className="grid grid-cols-3 gap-3">

@@ -10,6 +10,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { usePageHeader } from "@/components/dashboard/page-header";
+import { PageHeaderBar } from "@/components/dashboard/page-header-bar";
 
 interface Source {
   documentTitle: string;
@@ -171,20 +173,13 @@ export default function PlaygroundPage() {
     "What are the key skills?",
   ];
 
-  return (
-    <div className="flex flex-col h-[calc(100vh-4rem)] max-w-3xl mx-auto p-6">
-      {/* Header */}
-      <div className="flex items-start justify-between mb-5 flex-shrink-0">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center">
-              <Sparkles className="w-4 h-4 text-primary" />
-            </div>
-            <h1 className="text-lg font-bold">RAG Playground</h1>
-          </div>
-          <p className="text-sm text-muted-foreground">Test your AI assistant against indexed knowledge</p>
-        </div>
-        <div className="flex items-center gap-2">
+  usePageHeader(
+    <PageHeaderBar
+      icon={Sparkles}
+      tone="primary"
+      title="RAG Playground"
+      actions={
+        <>
           {keyReady && (
             <span className="inline-flex items-center gap-1.5 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full">
               <CheckCircle className="w-3 h-3" /> API key ready
@@ -195,9 +190,14 @@ export default function PlaygroundPage() {
               <RefreshCw className="w-3 h-3" /> New chat
             </Button>
           )}
-        </div>
-      </div>
+        </>
+      }
+    />,
+    [keyReady, messages.length],
+  );
 
+  return (
+    <div className="flex flex-col h-[calc(100vh-4rem)] max-w-3xl mx-auto p-6 pt-4">
       {/* Key error */}
       {keyError && (
         <div className="flex items-center gap-2 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 rounded-xl px-4 py-3 mb-4">

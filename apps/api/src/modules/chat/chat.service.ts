@@ -12,8 +12,8 @@ const ragService = new RagService();
 const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
 
 // History compaction settings
-const COMPACT_TRIGGER = 20;  // compact when uncompacted msgs exceed this
-const KEEP_RECENT    = 8;    // always keep last N messages raw after compaction
+const COMPACT_TRIGGER = 8;   // compact when uncompacted msgs exceed this
+const KEEP_RECENT    = 4;    // always keep last N messages raw after compaction
 
 type ContextMessage = { role: "user" | "assistant"; content: string };
 

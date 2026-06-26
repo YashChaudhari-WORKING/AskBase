@@ -10,6 +10,8 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import { Send, UserCheck, CheckCircle, Bot, User, Headphones } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+import { usePageHeader } from "@/components/dashboard/page-header";
+import { PageHeaderBar } from "@/components/dashboard/page-header-bar";
 
 interface QueueItem {
   handoffs: { id: string; conversationId: string; reason: string; status: string; createdAt: string };
@@ -105,13 +107,18 @@ export default function ConsolePage() {
     await loadQueue();
   }
 
-  return (
-    <div className="p-6 h-full flex flex-col">
-      <div className="mb-4">
-        <h1 className="text-2xl font-bold">Live Console</h1>
-        <p className="text-muted-foreground mt-1">Handle customer escalations in real time</p>
-      </div>
+  usePageHeader(
+    <PageHeaderBar
+      icon={Headphones}
+      tone="rose"
+      title="Live Console"
+      stats={[{ icon: Headphones, value: queue.length, label: "in queue", tone: queue.length > 0 ? "rose" : "muted" }]}
+    />,
+    [queue.length],
+  );
 
+  return (
+    <div className="p-6 pt-4 h-full flex flex-col">
       <div className="flex-1 grid grid-cols-[280px_1fr] gap-4 min-h-0">
         {/* Queue panel */}
         <Card className="flex flex-col overflow-hidden">

@@ -5,7 +5,7 @@ import api from "@/lib/api";
 import {
   User, Building2, Users, Key, Shield,
   Plus, Trash2, Copy, Check, Loader2,
-  AlertTriangle, Eye, EyeOff, Crown, ChevronDown,
+  AlertTriangle, Eye, EyeOff, Crown, ChevronDown, Settings2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +19,8 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { usePageHeader } from "@/components/dashboard/page-header";
+import { PageHeaderBar } from "@/components/dashboard/page-header-bar";
 
 // ── Types ──────────────────────────────────────────────────
 
@@ -552,6 +554,11 @@ export default function SettingsPage() {
     setMe(prev => prev ? { ...prev, ...updated } : prev);
   }
 
+  usePageHeader(
+    <PageHeaderBar icon={Settings2} tone="primary" title="Settings" />,
+    [],
+  );
+
   if (loading) {
     return (
       <div className="p-6 space-y-4 max-w-2xl">
@@ -566,11 +573,6 @@ export default function SettingsPage() {
 
   return (
     <div className="p-6">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
-        <p className="text-sm text-muted-foreground mt-1">Manage your account, workspace, and team</p>
-      </div>
-
       {/* Tab bar */}
       <div className="flex items-center gap-1 bg-muted/50 border border-border rounded-xl p-1 w-fit mb-6">
         {TABS.map(({ key, label, icon: Icon }) => (

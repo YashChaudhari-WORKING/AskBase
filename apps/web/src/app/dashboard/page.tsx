@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
-import { MessageSquare, Users, TrendingUp, BookOpen } from "lucide-react";
+import { MessageSquare, Users, TrendingUp, BookOpen, LayoutGrid } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { usePageHeader } from "@/components/dashboard/page-header";
+import { PageHeaderBar } from "@/components/dashboard/page-header-bar";
 
 interface Overview {
   totalConversations: number;
@@ -30,13 +32,22 @@ export default function DashboardPage() {
     { label: "Learned Responses", value: overview.learnedResponses, icon: BookOpen, color: "text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-500/10" },
   ] : [];
 
+  usePageHeader(
+    <PageHeaderBar
+      icon={LayoutGrid}
+      tone="primary"
+      title="Overview"
+      stats={overview ? [
+        { icon: MessageSquare, value: overview.totalConversations, label: "conversations" },
+        { icon: TrendingUp, value: `${overview.aiResolutionRate}%`, label: "AI resolved", tone: "emerald" },
+        { icon: Users, value: overview.totalHandoffs, label: "handoffs" },
+      ] : []}
+    />,
+    [overview],
+  );
+
   return (
     <div className="p-8">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold">Overview</h1>
-        <p className="text-muted-foreground mt-1">Your support platform at a glance</p>
-      </div>
-
       {overview === null ? (
         <div className="grid grid-cols-4 gap-4">
           {[...Array(4)].map((_, i) => (

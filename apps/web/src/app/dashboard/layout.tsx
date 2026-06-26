@@ -17,6 +17,7 @@ import { SocketProvider } from "@/providers/socket-provider";
 import { NotificationBell } from "@/components/notification-bell";
 import { LiveConversationsWidget } from "@/components/live-widget";
 import { useNotificationStore } from "@/store/notifications";
+import { PageHeaderProvider, PageHeaderSlot } from "@/components/dashboard/page-header";
 
 type User = { name?: string; email?: string; role?: string; firstName?: string; lastName?: string; tenantId?: string } | null;
 
@@ -469,12 +470,24 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </motion.aside>
       </SidebarOpen.Provider>
 
-      <main className="flex-1 min-w-0 bg-background rounded-xl overflow-auto border border-border shadow-sm relative">
-        <div className="absolute top-3 right-4 z-30">
-          <NotificationBell />
+      <PageHeaderProvider>
+        <div className="flex-1 min-w-0 flex flex-col gap-2">
+          {/* Bare header strip — lives on the muted background above the frame (sidebar level). */}
+          <div className="shrink-0 flex items-start justify-between gap-3 px-1 min-h-[40px]">
+            <div className="min-w-0 flex-1">
+              <PageHeaderSlot />
+            </div>
+            <div className="shrink-0">
+              <NotificationBell />
+            </div>
+          </div>
+
+          {/* Rounded page frame — holds page content / canvas only. */}
+          <main className="flex-1 min-h-0 bg-background rounded-xl overflow-auto border border-border shadow-sm relative">
+            {children}
+          </main>
         </div>
-        {children}
-      </main>
+      </PageHeaderProvider>
 
       <CommandPalette
         open={cmdOpen}

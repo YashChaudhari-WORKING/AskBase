@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { Search, X, ChevronUp } from "lucide-react";
+import { Search, X, ChevronUp, Inbox, Workflow } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -11,6 +11,8 @@ import { LeadsTable } from "@/components/leads/LeadsTable";
 import { LeadDrawer } from "@/components/leads/LeadDrawer";
 import { ALL_STATUSES, STATUS_CFG, type Lead, type Flow, type LeadStatus } from "@/components/leads/types";
 import api from "@/lib/api";
+import { usePageHeader } from "@/components/dashboard/page-header";
+import { PageHeaderBar } from "@/components/dashboard/page-header-bar";
 
 export default function AllLeadsPage() {
   const [flows, setFlows]       = useState<Flow[]>([]);
@@ -73,14 +75,16 @@ export default function AllLeadsPage() {
   const totalPartial  = leads.filter(l => l.isPartial).length;
   const hasFilters    = flowFilter !== "all" || statusFilter !== "all" || search !== "";
 
-  return (
-    <div className="h-full flex flex-col bg-background">
-      {/* Page header */}
-      <div className="px-7 py-5 border-b border-border flex-shrink-0 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground tracking-tight">Leads</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">All collected leads across your flows</p>
-        </div>
+  usePageHeader(
+    <PageHeaderBar
+      icon={Inbox}
+      tone="primary"
+      title="Leads"
+      stats={[
+        { icon: Inbox, value: leads.length, label: leads.length === 1 ? "lead" : "leads" },
+        { icon: Workflow, value: flows.length, label: flows.length === 1 ? "flow" : "flows" },
+      ]}
+      actions={
         <button
           onClick={() => setShowStats(s => !s)}
           className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground border border-border rounded-lg px-2.5 py-1.5 hover:bg-accent transition-colors"
@@ -88,8 +92,13 @@ export default function AllLeadsPage() {
           <ChevronUp className={`w-3.5 h-3.5 transition-transform duration-200 ${showStats ? "" : "rotate-180"}`} />
           {showStats ? "Hide stats" : "Show stats"}
         </button>
-      </div>
+      }
+    />,
+    [showStats, leads.length, flows.length],
+  );
 
+  return (
+    <div className="h-full flex flex-col bg-background">
       <div className="flex-1 overflow-auto px-7 py-6 space-y-5 min-h-0">
         {/* Stats */}
         {showStats && <LeadStatCards leads={leads} flowCount={flows.length} />}

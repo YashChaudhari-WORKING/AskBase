@@ -308,7 +308,12 @@ export function WidgetTab({
   // ── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-8 wt-cq">
+      <style>{`
+        .wt-cq { container-type: inline-size; }
+        .wt-2col { display: grid; grid-template-columns: 1fr; }
+        @container (min-width: 600px) { .wt-2col { grid-template-columns: 1fr 1fr; } }
+      `}</style>
 
       {/* ══ APPEARANCE ══════════════════════════════════════════════════════ */}
       <div className="flex flex-col gap-4">
@@ -445,7 +450,7 @@ export function WidgetTab({
       <div className="flex flex-col gap-4">
         <SectionTitle title="Identity & Branding" description="Avatar, subtitle, powered by, and work hours shown in the widget." />
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="wt-2col gap-4">
 
           {/* Left: Avatar + subtitle + hours */}
           <div className="flex flex-col gap-1.5">
@@ -545,7 +550,7 @@ export function WidgetTab({
       </div>
 
       {/* ══ TWO EQUAL COLUMNS ═══════════════════════════════════════════════ */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+      <div className="wt-2col gap-8 items-start">
 
         {/* ── LEFT: Content ── */}
         <div className="flex flex-col gap-4">

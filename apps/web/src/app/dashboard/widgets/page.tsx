@@ -8,6 +8,8 @@ import api from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
+import { usePageHeader } from "@/components/dashboard/page-header"
+import { PageHeaderBar } from "@/components/dashboard/page-header-bar"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -214,22 +216,24 @@ export default function WidgetThemesPage() {
     setThemes((prev) => prev.filter((t) => t.id !== id))
   }
 
-  return (
-    <div className="flex flex-col gap-6 p-6 max-w-6xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold">Widget Themes</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Create reusable themes and attach them to any assistant or flow bot.
-          </p>
-        </div>
+  usePageHeader(
+    <PageHeaderBar
+      icon={Paintbrush2}
+      tone="pink"
+      title="Widget Themes"
+      stats={[{ icon: Paintbrush2, value: themes.length, label: themes.length === 1 ? "theme" : "themes" }]}
+      actions={
         <Button onClick={createTheme} disabled={creating}>
           {creating ? <Loader2 className="mr-2 w-4 h-4 animate-spin" /> : <Plus className="mr-2 w-4 h-4" />}
           New theme
         </Button>
-      </div>
+      }
+    />,
+    [creating, themes.length],
+  )
 
+  return (
+    <div className="flex flex-col gap-6 p-6 max-w-6xl mx-auto">
       {/* Grid */}
       {loading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">

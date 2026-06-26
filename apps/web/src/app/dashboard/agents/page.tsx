@@ -10,8 +10,10 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { UserPlus, ShieldCheck, UserX, UserCheck } from "lucide-react";
+import { UserPlus, ShieldCheck, UserX, UserCheck, Users } from "lucide-react";
 import { useForm } from "react-hook-form";
+import { usePageHeader } from "@/components/dashboard/page-header";
+import { PageHeaderBar } from "@/components/dashboard/page-header-bar";
 
 interface Agent {
   id: string;
@@ -64,16 +66,21 @@ export default function AgentsPage() {
     await load();
   }
 
-  return (
-    <div className="p-8">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold">Agents</h1>
-          <p className="text-muted-foreground mt-1">Manage your support team</p>
-        </div>
+  const activeAgents = agents.filter((a) => a.isActive).length
+
+  usePageHeader(
+    <PageHeaderBar
+      icon={Users}
+      tone="cyan"
+      title="Agents"
+      stats={[
+        { icon: Users, value: agents.length, label: agents.length === 1 ? "agent" : "agents" },
+        { icon: UserCheck, value: activeAgents, label: "active", tone: "emerald" },
+      ]}
+      actions={
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <Button><UserPlus className="w-4 h-4 mr-2" />Invite Agent</Button>
+            <Button size="sm"><UserPlus className="w-4 h-4 mr-2" />Invite Agent</Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
@@ -111,8 +118,13 @@ export default function AgentsPage() {
             </form>
           </DialogContent>
         </Dialog>
-      </div>
+      }
+    />,
+    [open, inviting, watch("role"), agents.length, activeAgents],
+  );
 
+  return (
+    <div className="p-8">
       <Card>
         <Table>
           <TableHeader>

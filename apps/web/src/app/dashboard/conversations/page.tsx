@@ -45,6 +45,8 @@ import {
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { usePageHeader } from "@/components/dashboard/page-header";
+import { PageHeaderBar } from "@/components/dashboard/page-header-bar";
 
 interface Conversation {
   id: string;
@@ -257,16 +259,18 @@ export default function ConversationsPage() {
     },
   });
 
-  return (
-    <div className="p-8">
-      {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold tracking-tight">Conversations</h1>
-        <p className="text-muted-foreground mt-1 text-sm">
-          All customer conversations across channels
-        </p>
-      </div>
+  usePageHeader(
+    <PageHeaderBar
+      icon={MessageSquare}
+      tone="primary"
+      title="Conversations"
+      stats={[{ icon: Inbox, value: counts.all ?? 0, label: "total" }]}
+    />,
+    [counts.all],
+  );
 
+  return (
+    <div className="p-8 pt-4">
       {/* Tabs */}
       <Tabs value={tab} onValueChange={v => setTab(v as FilterTab)} className="mb-4">
         <TabsList className="h-9">

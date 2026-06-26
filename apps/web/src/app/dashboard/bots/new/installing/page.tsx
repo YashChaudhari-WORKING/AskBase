@@ -229,40 +229,6 @@ export default function InstallingPage() {
           }
         }
 
-        // Fire-and-forget: generate + create + attach widget theme
-        api.post("/widget-themes/generate", {
-          businessName: payload!.config.name,
-          description: payload!.config.systemPrompt ?? "",
-          style: payload!.widgetStyle ?? "modern",
-        }).then(async (themeRes) => {
-          const themeData = themeRes.data?.data ?? themeRes.data;
-          const createRes = await api.post("/widget-themes", {
-            name: themeData.themeName ?? `${payload!.config.name} Theme`,
-            botName: themeData.botName ?? payload!.config.name,
-            botSubtitle: themeData.botSubtitle,
-            botAvatarEmoji: themeData.botAvatarEmoji,
-            primaryColor: themeData.primaryColor ?? payload!.config.primaryColor,
-            headerBgColor: themeData.headerBgColor,
-            headerTextColor: themeData.headerTextColor,
-            chatBgColor: themeData.chatBgColor,
-            botBubbleBg: themeData.botBubbleBg,
-            botBubbleText: themeData.botBubbleText,
-            userBubbleBg: themeData.userBubbleBg,
-            userBubbleText: themeData.userBubbleText,
-            launcherBgColor: themeData.launcherBgColor,
-            sendButtonColor: themeData.sendButtonColor,
-            borderRadius: themeData.borderRadius ?? "xl",
-            launcherIconEmoji: themeData.launcherIconEmoji,
-            inputPlaceholder: themeData.inputPlaceholder,
-            homeGreeting: themeData.homeGreeting,
-            homeSubgreeting: themeData.homeSubgreeting,
-          });
-          const newThemeId = createRes.data?.data?.id ?? createRes.data?.id;
-          if (newThemeId) {
-            await api.patch(`/projects/${projectId}`, { widgetThemeId: newThemeId });
-          }
-        }).catch(() => { /* non-fatal */ });
-
         // Fire-and-forget: generate AI setup hints while the rest of install runs
         api.post("/projects/generate-setup-guide", {
           systemPrompt: payload!.config.systemPrompt ?? "",
