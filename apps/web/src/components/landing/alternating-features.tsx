@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import Image from "next/image";
-import { ImageIcon } from "lucide-react";
 
 /* ── Small bullet SVGs — 20×20 viewBox, stroke only ── */
 
@@ -261,31 +260,21 @@ const tabs: Tab[] = [
 
 /* ── Subcomponents ──────────────────────────────── */
 
-function Placeholder({ label }: { label: string }) {
+function Visual({ card }: { card: Card }) {
+  // Only render real images for now; skip missing screenshots (no placeholder boxes).
+  if (!card.image) return null;
   return (
-    <div className="w-full aspect-[4/3] rounded-2xl border border-dashed border-border bg-muted/20 flex flex-col items-center justify-center gap-3">
-      <ImageIcon className="size-7 text-muted-foreground/25" />
-      <p className="text-[11px] text-muted-foreground/40 font-medium">{label}</p>
+    <div className="rounded-2xl overflow-hidden border border-border shadow-xl shadow-black/8">
+      <Image
+        src={card.image}
+        alt="AskBase"
+        width={1400}
+        height={900}
+        className="w-full h-auto block"
+        priority
+      />
     </div>
   );
-}
-
-function Visual({ card }: { card: Card }) {
-  if (card.image) {
-    return (
-      <div className="rounded-2xl overflow-hidden border border-border shadow-xl shadow-black/8">
-        <Image
-          src={card.image}
-          alt="AskBase"
-          width={1400}
-          height={900}
-          className="w-full h-auto block"
-          priority
-        />
-      </div>
-    );
-  }
-  return <Placeholder label={card.imagePlaceholder} />;
 }
 
 /* ── Main component ─────────────────────────────── */
@@ -363,10 +352,12 @@ export function AlternatingFeatures() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4, delay: i * 0.08 }}
-              className={`grid md:grid-cols-2 gap-12 lg:gap-20 items-center ${
-                card.imageRight
-                  ? ""
-                  : "md:[&>*:first-child]:order-2 md:[&>*:last-child]:order-1"
+              className={`grid gap-12 lg:gap-20 items-center ${
+                card.image
+                  ? card.imageRight
+                    ? "md:grid-cols-2"
+                    : "md:grid-cols-2 md:[&>*:first-child]:order-2 md:[&>*:last-child]:order-1"
+                  : "md:grid-cols-1 max-w-2xl"
               }`}
             >
               {/* Text */}
