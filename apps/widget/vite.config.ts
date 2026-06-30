@@ -6,6 +6,18 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react()],
+    // Alias React → Preact/compat to ship a much smaller runtime (~3x lighter).
+    // Order matters: the more specific jsx-runtime keys must precede "react".
+    resolve: {
+      alias: {
+        "react/jsx-runtime": "preact/jsx-runtime",
+        "react/jsx-dev-runtime": "preact/jsx-dev-runtime",
+        "react-dom/client": "preact/compat",
+        "react-dom/test-utils": "preact/test-utils",
+        "react-dom": "preact/compat",
+        react: "preact/compat",
+      },
+    },
     define: {
       "process.env.NODE_ENV": JSON.stringify("production"),
       "process.env": "{}",

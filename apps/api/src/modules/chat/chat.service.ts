@@ -3,7 +3,7 @@ import { eq, and, desc, asc, inArray } from "drizzle-orm";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { RagService } from "../rag/rag.service";
 import { classifyIntent } from "./intent.service";
-import { embedQuery } from "../../common/utils/voyage";
+import { embedQuery, isVoyageRateLimit } from "../../common/utils/voyage";
 import { io, isAgentOnline } from "../../server";
 import { env } from "../../config/env";
 import type { SendMessageInput } from "@askbase/shared";
@@ -106,6 +106,18 @@ async function buildContextMessages(
   ];
 }
 
+// A flow is only invokable if it actually has nodes — empty/unbuilt flows
+// would dead-end the widget, so we treat them as "no flow".
+async function flowHasNodes(flowId: string | null | undefined): Promise<boolean> {
+  if (!flowId) return false;
+  const [f] = await db
+    .select({ nodes: flows.nodes })
+    .from(flows)
+    .where(eq(flows.id, flowId))
+    .limit(1);
+  return Array.isArray(f?.nodes) && (f!.nodes as any[]).length > 0;
+}
+
 export class ChatService {
   async sendMessage(tenantId: string, input: SendMessageInput, projectId?: string | null) {
     let customerId = input.customerId;
@@ -155,6 +167,7 @@ export class ChatService {
     let projectAttachedFlows: Array<{ flowId: string; flowName: string; trigger: string }> = [];
     let assistantType: string = "ai_agent";
     let fallbackFlowId: string | null = null;
+    let fallbackMessage: string | null = null;
 
     if (projectId) {
       const [project] = await db
@@ -171,6 +184,7 @@ export class ChatService {
         projectAttachedFlows = Array.isArray(project.attachedFlows) ? project.attachedFlows as any[] : [];
         assistantType = project.assistantType ?? "ai_agent";
         fallbackFlowId = project.fallbackFlowId ?? null;
+        fallbackMessage = project.fallbackMessage ?? null;
 
         // Scope retrieval to documents in the project's linked knowledge base
         if (project.knowledgeBaseId) {
@@ -192,6 +206,7 @@ export class ChatService {
         .limit(1);
       systemPrompt = config?.systemPrompt ?? null;
       confidenceThreshold = config?.confidenceThreshold ?? 0.35;
+      fallbackMessage = (config as any)?.fallbackMessage ?? null;
     }
 
     // ── Flow-only bot routing chain ──────────────────────────────────────────
@@ -222,7 +237,7 @@ export class ChatService {
         return triggers.some((t: string) => userText.includes(t));
       }) ?? (projectFlowId ? { flowId: projectFlowId, flowName: "default", trigger: "" } : null);
 
-      if (matchedFlow) {
+      if (matchedFlow && await flowHasNodes(matchedFlow.flowId)) {
         const [aiMsg] = await db.insert(messages).values({
           conversationId, senderType: "ai", content: "__flow_trigger__", confidenceScore: 1,
           metadata: { action: "invoke_flow", flowId: matchedFlow.flowId },
@@ -231,8 +246,8 @@ export class ChatService {
         return { message: aiMsg, conversationId, handoffTriggered: false, action: "invoke_flow", flowId: matchedFlow.flowId };
       }
 
-      // 3. No flow matched → use configured fallback flow if set
-      if (fallbackFlowId) {
+      // 3. No flow matched (or matched flow is empty) → use configured fallback flow if it has nodes
+      if (await flowHasNodes(fallbackFlowId)) {
         const [aiMsg] = await db.insert(messages).values({
           conversationId, senderType: "ai", content: "__flow_trigger__", confidenceScore: 1,
           metadata: { action: "invoke_flow", flowId: fallbackFlowId },
@@ -266,8 +281,9 @@ export class ChatService {
       return { message: aiMsg, conversationId, handoffTriggered: false };
     }
 
-    // Flow trigger — invoke the linked flow instead of RAG
-    if (intent.intent === "flow_trigger") {
+    // Flow trigger — invoke the linked flow instead of RAG (only if it has nodes;
+    // an empty/unbuilt flow falls through to the normal RAG answer below).
+    if (intent.intent === "flow_trigger" && await flowHasNodes(intent.flowId)) {
       const flowId = intent.flowId;
       const [aiMsg] = await db.insert(messages).values({
         conversationId,
@@ -314,15 +330,35 @@ export class ChatService {
     }
 
     // ── RAG pipeline (rag_query intent) ───────────────────────────────
-    const ragResult = await ragService.query(
-      tenantId,
-      input.content,
-      systemPrompt,
-      confidenceThreshold,
-      contextMessages,
-      documentScope,
-      intent.rewrittenQuery  // pass optimized query for embedding
-    );
+    let ragResult;
+    try {
+      ragResult = await ragService.query(
+        tenantId,
+        input.content,
+        systemPrompt,
+        confidenceThreshold,
+        contextMessages,
+        documentScope,
+        intent.rewrittenQuery  // pass optimized query for embedding
+      );
+    } catch (err: any) {
+      // Graceful degradation — never surface a raw 500 to the widget.
+      // Most commonly a Voyage rate-limit (429) on embed/rerank.
+      const rateLimited = isVoyageRateLimit(err);
+      const friendly = rateLimited
+        ? "I'm getting a lot of requests right now and need a moment. Please ask again in a few seconds — or I can connect you with a person."
+        : (fallbackMessage ?? "Sorry, I ran into a temporary issue answering that. Please try again in a moment.");
+
+      const [aiMsg] = await db.insert(messages).values({
+        conversationId,
+        senderType: "ai",
+        content: friendly,
+        confidenceScore: 0,
+      }).returning();
+      io.to(`conversation:${conversationId}`).emit("message:new", aiMsg);
+      console.error("[chat] RAG query failed, served fallback:", err?.message);
+      return { message: aiMsg, conversationId, handoffTriggered: false, degraded: true };
+    }
 
     if (ragResult.shouldHandoff || !ragResult.answer) {
       // ── Soft handoff: clarify once before escalating ──────────────────

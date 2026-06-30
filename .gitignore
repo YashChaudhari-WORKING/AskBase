@@ -33,6 +33,10 @@ PRODUCT.md
 # Dev/test scripts
 test-prompt.mjs
 test-widget.html
+scripts/
+
+# Knowledge-base source documents (kept local, not pushed)
+kb-content/
 
 # Logs
 *.log

@@ -48,7 +48,15 @@ export interface ChatMsg {
   choices?: Array<{ id: string; label: string; value: string }>;
 }
 
+export interface FlowEdge {
+  id?: string;
+  source: string;
+  target: string;
+  sourceHandle?: string | null;
+}
+
 export interface FlowNode {
+  id: string;
   type: string;
   data: {
     message?: string;

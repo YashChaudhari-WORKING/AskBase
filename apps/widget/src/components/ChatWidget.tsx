@@ -1,1236 +1,640 @@
-import { useState, useEffect, useRef, useCallback } from "react";
-import type { WidgetConfig, ChatMsg, FlowNode } from "../types";
+import { useEffect, useRef, useState } from "react";
+import { animate } from "@motionone/dom";
+import type { WidgetConfig, ChatMsg, FlowNode, FlowEdge } from "../types";
+import { renderMarkdown, MARKDOWN_CSS } from "../lib/markdown";
+import { FlowCollectForm } from "./FlowCollectForm";
 
-const API_URL = (import.meta as any).env?.VITE_API_URL ?? "https://api.askbase.io";
-
-// ---------------------------------------------------------------------------
-// Inject minimal keyframe CSS once (typing bounce + bubble pop)
-// ---------------------------------------------------------------------------
-
-let cssInjected = false;
-function injectCSS() {
-  if (cssInjected || typeof document === "undefined") return;
-  cssInjected = true;
-  const s = document.createElement("style");
-  s.textContent = `
-    @keyframes ab-bounce {
-      0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-5px)}
-    }
-    @keyframes ab-pop {
-      from{opacity:0;transform:translateY(6px) scale(0.95)}
-      to{opacity:1;transform:translateY(0) scale(1)}
-    }
-    #askbase-widget-root * { box-sizing: border-box; }
-    #askbase-widget-root ::-webkit-scrollbar { display: none; }
-  `;
-  document.head.appendChild(s);
+// Rich, sanitized markdown for bot messages (marked + DOMPurify + highlight.js)
+function BotMarkdown({ text, fontSize = "14px" }: { text: string; fontSize?: string }) {
+  return <div className="ab-md" style={{ fontSize }} dangerouslySetInnerHTML={{ __html: renderMarkdown(text) }} />;
 }
 
-// ---------------------------------------------------------------------------
-// Notification sound
-// ---------------------------------------------------------------------------
+// ── Inline SVG icons ──────────────────────────────────────────────────────────
+const Icons = {
+  X: ({ s = 18 }: { s?: number }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>,
+  Send: ({ s = 18 }: { s?: number }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 2 11 13" /><path d="M22 2 15 22l-4-9-9-4 20-7Z" /></svg>,
+  Chevron: ({ s = 16, dir = "down" }: { s?: number; dir?: "up" | "down" }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ transform: dir === "up" ? "rotate(180deg)" : undefined, transition: "transform 0.2s" }}><polyline points="6 9 12 15 18 9" /></svg>,
+  Chat: ({ s = 20 }: { s?: number }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" /></svg>,
+  Home: ({ s = 20 }: { s?: number }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><polyline points="9 22 9 12 15 12 15 22" /></svg>,
+  Book: ({ s = 20 }: { s?: number }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" /><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" /></svg>,
+  ChevronRight: ({ s = 16 }: { s?: number }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>,
+  Mic: ({ s = 18 }: { s?: number }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" y1="19" x2="12" y2="23" /><line x1="8" y1="23" x2="16" y2="23" /></svg>,
+};
 
-function playNotificationSound() {
+// ── Notification sound ────────────────────────────────────────────────────────
+function playSound() {
   try {
     const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
+    const osc = ctx.createOscillator(), gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
     osc.type = "sine";
     osc.frequency.setValueAtTime(880, ctx.currentTime);
     osc.frequency.exponentialRampToValueAtTime(660, ctx.currentTime + 0.12);
     gain.gain.setValueAtTime(0.18, ctx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
-    osc.start(ctx.currentTime);
-    osc.stop(ctx.currentTime + 0.35);
+    osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.35);
   } catch {}
 }
 
-// ---------------------------------------------------------------------------
-// Tiny markdown renderer
-// ---------------------------------------------------------------------------
-
-function MdText({ text, accent, fontSize = "14px" }: { text: string; accent: string; fontSize?: string }) {
-  const lines = text.split("\n");
-  const nodes: React.ReactNode[] = [];
-  let i = 0;
-  let k = 0;
-
-  function parseInline(s: string): React.ReactNode[] {
-    const parts: React.ReactNode[] = [];
-    const re = /(\*\*(.+?)\*\*)|(\*(.+?)\*)|(\[(.+?)\]\((.+?)\))/g;
-    let last = 0;
-    let m: RegExpExecArray | null;
-    while ((m = re.exec(s)) !== null) {
-      if (m.index > last) parts.push(s.slice(last, m.index));
-      if (m[1]) parts.push(<strong key={m.index}>{m[2]}</strong>);
-      else if (m[3]) parts.push(<em key={m.index}>{m[4]}</em>);
-      else if (m[5])
-        parts.push(
-          <a key={m.index} href={m[7]} target="_blank" rel="noopener noreferrer"
-            style={{ color: accent, textDecoration: "underline" }}>
-            {m[6]}
-          </a>
-        );
-      last = m.index + m[0].length;
-    }
-    if (last < s.length) parts.push(s.slice(last));
-    return parts;
-  }
-
-  while (i < lines.length) {
-    const line = lines[i];
-    const olMatch = line.match(/^(\d+)\.\s+(.*)/);
-    const ulMatch = line.match(/^[-*]\s+(.*)/);
-
-    if (olMatch || ulMatch) {
-      const isOl = !!olMatch;
-      const items: React.ReactNode[] = [];
-      let lk = 0;
-      while (i < lines.length) {
-        const l = lines[i];
-        const om = l.match(/^(\d+)\.\s+(.*)/);
-        const um = l.match(/^[-*]\s+(.*)/);
-        if (isOl && om) { items.push(<li key={lk++}>{parseInline(om[2])}</li>); i++; }
-        else if (!isOl && um) { items.push(<li key={lk++}>{parseInline(um[1])}</li>); i++; }
-        else break;
-      }
-      nodes.push(
-        isOl
-          ? <ol key={k++} style={{ paddingLeft: 16, margin: "4px 0" }}>{items}</ol>
-          : <ul key={k++} style={{ paddingLeft: 16, margin: "4px 0" }}>{items}</ul>
-      );
-      continue;
-    }
-
-    if (line.trim() === "") { nodes.push(<br key={k++} />); i++; continue; }
-    nodes.push(<p key={k++} style={{ margin: "2px 0" }}>{parseInline(line)}</p>);
-    i++;
-  }
-
-  return <div style={{ fontSize, lineHeight: 1.5 }}>{nodes}</div>;
+// ── Color helpers ─────────────────────────────────────────────────────────────
+function isLight(hex: string) {
+  const c = (hex || "#ffffff").replace("#", "");
+  const r = parseInt(c.slice(0, 2), 16), g = parseInt(c.slice(2, 4), 16), b = parseInt(c.slice(4, 6), 16);
+  return (r * 299 + g * 587 + b * 114) / 1000 > 140;
+}
+function shade(hex: string, amt: number) {
+  const c = (hex || "#000000").replace("#", "");
+  let r = parseInt(c.slice(0, 2), 16), g = parseInt(c.slice(2, 4), 16), b = parseInt(c.slice(4, 6), 16);
+  r = Math.max(0, Math.min(255, r + amt)); g = Math.max(0, Math.min(255, g + amt)); b = Math.max(0, Math.min(255, b + amt));
+  return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
 }
 
-// ---------------------------------------------------------------------------
-// SVG icons (subset of lucide)
-// ---------------------------------------------------------------------------
+interface TC {
+  headerBg: string; headerText: string; chatBg: string;
+  botBg: string; botText: string; userBg: string; userText: string;
+  accent: string; launcherBg: string; launcherIconUrl: string | null;
+  radius: number; fontSize: string; showTimestamps: boolean;
+}
 
-const Icon = {
-  X: () => (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-      <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-    </svg>
-  ),
-  Send: () => (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
-    </svg>
-  ),
-  MessageSquare: () => (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-    </svg>
-  ),
-  MessageSquareSm: () => (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-    </svg>
-  ),
-  Home: () => (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
-    </svg>
-  ),
-  BookOpen: () => (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
-    </svg>
-  ),
-  ChevronRight: () => (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="9 18 15 12 9 6"/>
-    </svg>
-  ),
-  ChevronUp: ({ rotated }: { rotated?: boolean }) => (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-      style={{ transform: rotated ? "rotate(180deg)" : undefined, transition: "transform 0.2s" }}>
-      <polyline points="18 15 12 9 6 15"/>
-    </svg>
-  ),
-};
-
-// ---------------------------------------------------------------------------
-// Default config
-// ---------------------------------------------------------------------------
-
-const DEFAULT_CONFIG: WidgetConfig = {
-  name: "Assistant",
-  welcomeMessage: "Hi! How can I help you today?",
-  primaryColor: "#6366f1",
-  botAvatarEmoji: "💬",
-  botAvatarUrl: null,
-  botSubtitle: "",
-  widgetPosition: "bottom-right",
-  openingMessages: [],
-  repeatMessages: false,
-  homeGreeting: "Hi! How can we help?",
-  homeSubgreeting: "We usually reply in a few minutes.",
-  conversationStarters: [],
-  inputPlaceholder: "Type a message…",
-  widgetQuickReplies: [],
-  allowAttachments: false,
-  showHelpCenter: false,
-  helpCenterTitle: "Help & Resources",
-  helpArticles: [],
-  helpCenterUrl: null,
-  showPoweredBy: true,
-  footerText: "Powered by AskBase",
-  footerLinkUrl: "",
-  businessHoursText: "",
-  theme: null,
-};
-
-// ---------------------------------------------------------------------------
-// Main ChatWidget
-// ---------------------------------------------------------------------------
-
-interface Props { apiKey: string }
-
-export function ChatWidget({ apiKey }: Props) {
-  useEffect(() => { injectCSS(); }, []);
-
-  const [config, setConfig] = useState<WidgetConfig>(DEFAULT_CONFIG);
+// ── Main component ────────────────────────────────────────────────────────────
+export function ChatWidget({ apiKey, apiUrl = "http://localhost:4000/api" }: { apiKey: string; apiUrl?: string }) {
+  const [config, setConfig] = useState<WidgetConfig | null>(null);
+  const [loadError, setLoadError] = useState(false);
+  const [tc, setTc] = useState<Partial<TC> | null>(null);
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<"home" | "chat" | "help">("chat");
-
-  // Proactive bubbles
   const [proactiveBubbles, setProactiveBubbles] = useState<string[]>([]);
-  const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
-  const cycleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Quick reply chips
-  const [showQuickReplies, setShowQuickReplies] = useState(false);
-
-  // Chat state
+  const [showQR, setShowQR] = useState(true);
   const [input, setInput] = useState("");
   const [msgs, setMsgs] = useState<ChatMsg[]>([]);
   const [convId, setConvId] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
-
-  // Flow state
   const [flowId, setFlowId] = useState<string | null>(null);
   const [flowNodes, setFlowNodes] = useState<FlowNode[]>([]);
-  const [flowFieldValue, setFlowFieldValue] = useState("");
-  const [flowFieldError, setFlowFieldError] = useState<string | null>(null);
-  const [flowNodeIdx, setFlowNodeIdx] = useState(0);
+  const [flowEdges, setFlowEdges] = useState<FlowEdge[]>([]);
+  const [flowCurrentId, setFlowCurrentId] = useState<string | null>(null);
   const [flowAnswers, setFlowAnswers] = useState<Record<string, string>>({});
   const [flowDone, setFlowDone] = useState(false);
-
+  const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const cycleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const messagesEnd = useRef<HTMLDivElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const recognitionRef = useRef<any>(null);
+  const [listening, setListening] = useState(false);
 
-  // Load config
+  // Motion One — premium spring entrance for the panel
+  useEffect(() => {
+    if (open && panelRef.current) {
+      animate(
+        panelRef.current,
+        { opacity: [0, 1], transform: ["translateY(20px) scale(.96)", "translateY(0) scale(1)"] },
+        { duration: 0.42, easing: [0.34, 1.56, 0.64, 1] },
+      );
+    }
+  }, [open]);
+
+  // Inject keyframes + base styles into the widget's root (Shadow DOM when present)
+  useEffect(() => {
+    const node = rootRef.current?.getRootNode();
+    const target: ParentNode = node instanceof ShadowRoot ? node : document.head;
+    const s = document.createElement("style");
+    s.textContent = `
+      @keyframes ab-pop{from{opacity:0;transform:translateY(8px) scale(.96)}to{opacity:1;transform:none}}
+      @keyframes ab-bubble{0%{opacity:0;transform:translateX(28px) scale(.85)}60%{opacity:1}100%{opacity:1;transform:none}}
+      @keyframes ab-fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+      @keyframes ab-panel{from{opacity:0;transform:translateY(16px) scale(.98)}to{opacity:1;transform:none}}
+      @keyframes ab-bounce{0%,80%,100%{transform:translateY(0);opacity:.4}40%{transform:translateY(-4px);opacity:1}}
+      @keyframes ab-spin{to{transform:rotate(360deg)}}
+      @keyframes ab-pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.85)}}
+      @keyframes ab-mic{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.5)}50%{box-shadow:0 0 0 6px rgba(239,68,68,0)}}
+      :host{all:initial}
+      ${MARKDOWN_CSS}
+      #askbase-widget-root,#askbase-widget-root *{box-sizing:border-box;font-family:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;-webkit-font-smoothing:antialiased}
+      #askbase-widget-root button{appearance:none;-webkit-appearance:none;font:inherit}
+      #askbase-widget-root .ab-scroll::-webkit-scrollbar{width:6px;height:6px}
+      #askbase-widget-root .ab-scroll::-webkit-scrollbar-thumb{background:rgba(0,0,0,.14);border-radius:999px}
+      #askbase-widget-root .ab-scroll::-webkit-scrollbar-track{background:transparent}
+      #askbase-widget-root .ab-hscroll::-webkit-scrollbar{display:none}
+      #askbase-widget-root input::placeholder,#askbase-widget-root textarea::placeholder{color:currentColor;opacity:.55}
+    `;
+    target.appendChild(s);
+    return () => { s.remove(); };
+  }, []);
+
+  // Load config + theme (localStorage cache → instant; fresh fetch in background)
   useEffect(() => {
     if (!apiKey) return;
-    fetch(`${API_URL}/api/knowledge/config/public`, {
-      headers: { "x-api-key": apiKey },
-    })
-      .then((r) => r.json())
-      .then((data) => {
+    const cacheKey = `askbase_cfg_${apiKey}`;
+
+    function applyTheme(d: any) {
+      if (!d?.theme) return;
+      setTc({
+        headerBg: d.theme.headerBg ?? d.primaryColor,
+        headerText: d.theme.headerText ?? "#ffffff",
+        chatBg: d.theme.chatBg ?? "#f8fafc",
+        botBg: d.theme.botBg ?? "#ffffff",
+        botText: d.theme.botText ?? "#1e293b",
+        userBg: d.theme.userBg ?? d.primaryColor,
+        userText: d.theme.userText ?? "#ffffff",
+        accent: d.theme.accent ?? d.primaryColor,
+        launcherBg: d.theme.launcherBg ?? d.primaryColor,
+        launcherIconUrl: d.theme.launcherIconUrl ?? null,
+        radius: parseInt(String(d.theme.radius), 10) || 18, // API sends "16px" → 16
+        fontSize: d.theme.fontSize ?? "14px",
+        showTimestamps: d.theme.showTimestamps ?? false,
+      });
+    }
+
+    // 1. Hydrate instantly from cache if present
+    try {
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) { const d = JSON.parse(cached); setConfig(d); applyTheme(d); }
+    } catch {}
+
+    // 2. Always refresh in the background
+    fetch(`${apiUrl}/knowledge/config/public`, { headers: { "x-api-key": apiKey } })
+      .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+      .then(data => {
         const d = data?.data ?? data;
-        if (d) setConfig((prev) => ({ ...prev, ...d }));
+        if (!d) throw new Error();
+        setConfig(d); applyTheme(d);
+        try { localStorage.setItem(cacheKey, JSON.stringify(d)); } catch {}
       })
-      .catch(() => {});
-  }, [apiKey]);
+      .catch(() => { if (!config) setLoadError(true); });
+  }, [apiKey, apiUrl]);
 
-  useEffect(() => {
-    messagesEnd.current?.scrollIntoView({ behavior: "smooth" });
-  }, [msgs, sending]);
+  useEffect(() => { messagesEnd.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs, sending]);
 
-  // Resolved theme colors
-  const C = {
-    headerBg: config.theme?.headerBg ?? config.primaryColor,
-    headerText: config.theme?.headerText ?? "#ffffff",
-    chatBg: config.theme?.chatBg ?? "#f8fafc",
-    botBg: config.theme?.botBg ?? "#f1f5f9",
-    botText: config.theme?.botText ?? "#1e293b",
-    userBg: config.theme?.userBg ?? config.primaryColor,
-    userText: config.theme?.userText ?? "#ffffff",
-    accent: config.theme?.accent ?? config.primaryColor,
-    launcherBg: config.theme?.launcherBg ?? config.primaryColor,
-    launcherIconUrl: config.theme?.launcherIconUrl ?? null,
-    radius: config.theme?.radius ?? "16px",
-    fontSize: config.theme?.fontSize ?? "14px",
-    showTimestamps: config.theme?.showTimestamps ?? false,
+  const cfg = config;
+  const C: TC = {
+    headerBg: tc?.headerBg ?? cfg?.primaryColor ?? "#4f46e5",
+    headerText: tc?.headerText ?? "#ffffff",
+    chatBg: tc?.chatBg ?? "#f8fafc",
+    botBg: tc?.botBg ?? "#ffffff",
+    botText: tc?.botText ?? "#1e293b",
+    userBg: tc?.userBg ?? cfg?.primaryColor ?? "#4f46e5",
+    userText: tc?.userText ?? "#ffffff",
+    accent: tc?.accent ?? cfg?.primaryColor ?? "#4f46e5",
+    launcherBg: tc?.launcherBg ?? cfg?.primaryColor ?? "#4f46e5",
+    launcherIconUrl: tc?.launcherIconUrl ?? null,
+    radius: tc?.radius ?? 18,
+    fontSize: tc?.fontSize ?? "14px",
+    showTimestamps: tc?.showTimestamps ?? false,
   };
 
-  const posStyle: React.CSSProperties =
-    config.widgetPosition === "bottom-left" ? { left: 24 } : { right: 24 };
+  // Chrome colors derived from chatBg so the shell matches the theme
+  const light = isLight(C.chatBg);
+  const surface = light ? "#ffffff" : shade(C.chatBg, 14);
+  const borderColor = light ? "#eceef2" : "rgba(255,255,255,0.08)";
+  const mutedText = light ? "#8a93a3" : "rgba(255,255,255,0.5)";
+  const foreground = light ? "#1a1f29" : "#f4f6fa";
+  const inputBg = light ? "#f4f5f7" : "rgba(255,255,255,0.06)";
+  const headerGrad = `linear-gradient(135deg, ${shade(C.headerBg, 18)} 0%, ${C.headerBg} 60%, ${shade(C.headerBg, -16)} 100%)`;
 
+  const pos: React.CSSProperties = cfg?.widgetPosition === "bottom-left" ? { left: 24 } : { right: 24 };
   const inFlow = !!flowId && !flowDone;
+  const loading = !config && !loadError;
 
-  // ── Proactive messages ───────────────────────────────────────────────────
+  const starters = (cfg?.conversationStarters ?? []).filter(s => s.label?.trim());
+  const qr = (cfg?.widgetQuickReplies ?? []).filter(q => q.label?.trim());
+  const articles = (cfg?.helpArticles ?? []).filter(a => a.title?.trim());
+  const tabs = [
+    { id: "chat" as const, label: "Messages", Icon: Icons.Chat },
+    { id: "home" as const, label: "Home", Icon: Icons.Home },
+    ...(cfg?.showHelpCenter ? [{ id: "help" as const, label: "Help", Icon: Icons.Book }] : []),
+  ];
 
-  function scheduleProactive(
-    openingMsgs: Array<{ text: string; delaySeconds: number }>,
-    repeat: boolean
-  ) {
-    timersRef.current.forEach(clearTimeout);
-    timersRef.current = [];
+  function addBotMsg(content: string, choices?: ChatMsg["choices"]) {
+    setMsgs(p => [...p, { id: crypto.randomUUID(), role: "bot", content, choices }]);
+  }
+
+  function scheduleProactive(messages: Array<{ text: string; delaySeconds: number }>, repeat: boolean) {
+    timersRef.current.forEach(clearTimeout); timersRef.current = [];
     if (cycleRef.current) clearTimeout(cycleRef.current);
-
-    openingMsgs.forEach(({ text, delaySeconds }) => {
-      const t = setTimeout(() => {
-        setProactiveBubbles((prev) => [...prev, text]);
-        playNotificationSound();
-      }, delaySeconds * 1000);
+    messages.forEach(({ text, delaySeconds }) => {
+      const t = setTimeout(() => { setProactiveBubbles(p => [...p, text]); playSound(); }, delaySeconds * 1000);
       timersRef.current.push(t);
     });
-
-    if (repeat && openingMsgs.length > 0) {
-      const lastDelay = Math.max(...openingMsgs.map((m) => m.delaySeconds));
-      cycleRef.current = setTimeout(() => {
-        setProactiveBubbles([]);
-        scheduleProactive(openingMsgs, repeat);
-      }, (lastDelay + 2) * 1000);
+    if (repeat && messages.length > 0) {
+      const last = Math.max(...messages.map(m => m.delaySeconds));
+      cycleRef.current = setTimeout(() => { setProactiveBubbles([]); scheduleProactive(messages, repeat); }, (last + 6) * 1000);
     }
   }
 
   useEffect(() => {
-    const msgs = config.openingMessages ?? [];
-    if (msgs.length === 0 || open) return;
-    scheduleProactive(msgs, config.repeatMessages ?? false);
-    return () => {
-      timersRef.current.forEach(clearTimeout);
-      if (cycleRef.current) clearTimeout(cycleRef.current);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [config.openingMessages, config.repeatMessages]);
+    const m = cfg?.openingMessages ?? [];
+    if (!m.length || open) return;
+    scheduleProactive(m, cfg?.repeatMessages ?? false);
+    return () => { timersRef.current.forEach(clearTimeout); if (cycleRef.current) clearTimeout(cycleRef.current); };
+  }, [cfg?.openingMessages, cfg?.repeatMessages, open]);
 
   function clearProactive() {
-    setProactiveBubbles([]);
-    timersRef.current.forEach(clearTimeout);
+    setProactiveBubbles([]); timersRef.current.forEach(clearTimeout);
     if (cycleRef.current) clearTimeout(cycleRef.current);
   }
 
   function openWidget() {
-    setOpen(true);
-    setTab("chat");
-    if (msgs.length === 0) addBotMsg(config.welcomeMessage || "Hi! How can I help?");
+    setOpen(true); setTab("chat");
+    if (msgs.length === 0) addBotMsg(cfg?.welcomeMessage || "Hi! How can I help?");
     clearProactive();
-  }
-
-  // ── Chat helpers ─────────────────────────────────────────────────────────
-
-  function addBotMsg(content: string, choices?: ChatMsg["choices"]) {
-    setMsgs((prev) => [
-      ...prev,
-      { id: crypto.randomUUID(), role: "bot", content, choices },
-    ]);
-  }
-
-  // ── Flow logic ────────────────────────────────────────────────────────────
-
-  async function advanceFlow(userAnswer?: string, fieldName?: string) {
-    const nodes = flowNodes;
-    let idx = flowNodeIdx;
-    const answers = { ...flowAnswers };
-
-    if (userAnswer !== undefined && fieldName) {
-      answers[fieldName] = userAnswer;
-      setFlowAnswers(answers);
-    }
-
-    while (idx < nodes.length) {
-      const node = nodes[idx];
-      idx++;
-
-      if (node.type === "start") continue;
-
-      if (node.type === "message") {
-        addBotMsg(node.data.message || "");
-        continue;
-      }
-
-      if (node.type === "collect") {
-        setFlowNodeIdx(idx);
-        setFlowFieldValue("");
-        setFlowFieldError(null);
-        addBotMsg(
-          node.data.question ||
-            `Please enter your ${node.data.fieldName || "answer"}`
-        );
-        return;
-      }
-
-      if (node.type === "choice") {
-        setFlowNodeIdx(idx);
-        setMsgs((prev) => [
-          ...prev,
-          {
-            id: crypto.randomUUID(),
-            role: "bot",
-            content: node.data.question || "Please choose an option:",
-            choices: node.data.options ?? [],
-          },
-        ]);
-        return;
-      }
-
-      if (
-        node.type === "lead_save" ||
-        node.type === "webhook" ||
-        node.type === "google_sheet"
-      ) {
-        try {
-          await fetch(`${API_URL}/api/flows/public/${flowId}/submit`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "x-api-key": apiKey,
-            },
-            body: JSON.stringify({ data: answers }),
-          });
-        } catch {}
-        continue;
-      }
-
-      if (node.type === "end") {
-        addBotMsg(node.data.message || "Thanks! We'll be in touch soon.");
-        setFlowDone(true);
-        setFlowId(null);
-        setFlowNodes([]);
-        return;
-      }
-    }
-
-    setFlowDone(true);
-    setFlowId(null);
-    setFlowNodes([]);
-  }
-
-  async function startFlow(fId: string) {
-    try {
-      const res = await fetch(`${API_URL}/api/flows/public/${fId}`, {
-        headers: { "x-api-key": apiKey },
-      });
-      const data = await res.json();
-      const d = data?.data ?? data;
-      const nodes: FlowNode[] = d.nodes ?? [];
-
-      setFlowId(fId);
-      setFlowNodes(nodes);
-      setFlowNodeIdx(0);
-      setFlowAnswers({});
-      setFlowDone(false);
-
-      let idx = 0;
-      while (idx < nodes.length) {
-        const node = nodes[idx];
-        idx++;
-        if (node.type === "start") continue;
-        if (node.type === "message") { addBotMsg(node.data.message || ""); continue; }
-        if (node.type === "collect") {
-          setFlowNodeIdx(idx);
-          addBotMsg(
-            node.data.question ||
-              `Please enter your ${node.data.fieldName || "answer"}`
-          );
-          return;
-        }
-        if (node.type === "choice") {
-          setFlowNodeIdx(idx);
-          setMsgs((prev) => [
-            ...prev,
-            {
-              id: crypto.randomUUID(),
-              role: "bot",
-              content: node.data.question || "Please choose:",
-              choices: node.data.options ?? [],
-            },
-          ]);
-          return;
-        }
-        if (node.type === "end") {
-          addBotMsg(node.data.message || "Thanks!");
-          setFlowDone(true);
-          return;
-        }
-      }
-    } catch {
-      addBotMsg("I wasn't able to load that flow. Please try again.");
-    }
-  }
-
-  function validateFlowInput(value: string, node: FlowNode): string | null {
-    const {
-      fieldType = "text",
-      required = false,
-      minLength,
-      maxLength,
-      min,
-      max,
-      step,
-      minDate,
-      maxDate,
-      pattern,
-      fieldName,
-    } = node.data ?? {};
-    const trimmed = value.trim();
-
-    if (required && !trimmed) return "This field is required.";
-    if (!trimmed && !required) return null;
-
-    if (minLength !== undefined && trimmed.length < minLength)
-      return `Must be at least ${minLength} character${minLength === 1 ? "" : "s"}.`;
-    if (maxLength !== undefined && trimmed.length > maxLength)
-      return `Must be at most ${maxLength} character${maxLength === 1 ? "" : "s"}.`;
-
-    if (fieldType === "number") {
-      const num = Number(trimmed);
-      if (Number.isNaN(num)) return "Please enter a valid number.";
-      if (min !== undefined && num < min)
-        return max !== undefined ? `Must be between ${min} and ${max}.` : `Must be at least ${min}.`;
-      if (max !== undefined && num > max)
-        return min !== undefined ? `Must be between ${min} and ${max}.` : `Must be at most ${max}.`;
-      if (step !== undefined && step > 0) {
-        const adj = (num - (min ?? 0)) / step;
-        if (Math.abs(adj - Math.round(adj)) > 1e-6)
-          return `Must be a multiple of ${step}.`;
-      }
-    }
-
-    if (fieldType === "email" && !pattern) {
-      if (!/^[\w.+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(trimmed))
-        return "Please enter a valid email address.";
-    }
-    if (fieldType === "phone" && !pattern) {
-      if (!/^[+]?[0-9 ()\-]{7,20}$/.test(trimmed))
-        return "Please enter a valid phone number.";
-    }
-    if (fieldType === "url" && !pattern) {
-      if (!/^https?:\/\/[^\s]+$/.test(trimmed))
-        return "Please enter a valid URL (start with http:// or https://).";
-    }
-
-    if (pattern) {
-      try {
-        if (!new RegExp(pattern).test(trimmed))
-          return `${fieldName ?? "Value"} doesn't match the expected format.`;
-      } catch {}
-    }
-
-    if (fieldType === "date") {
-      const d = new Date(trimmed);
-      if (Number.isNaN(d.getTime())) return "Please enter a valid date.";
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      if (minDate === "future" && d <= today) return "Please pick a future date.";
-      if (minDate === "today" && d < today) return "Date can't be in the past.";
-      if (minDate === "past" && d >= today) return "Please pick a past date.";
-      if (minDate && /^\d{4}-\d{2}-\d{2}$/.test(minDate) && d < new Date(minDate))
-        return `Earliest allowed: ${minDate}.`;
-      if (maxDate && /^\d{4}-\d{2}-\d{2}$/.test(maxDate) && d > new Date(maxDate))
-        return `Latest allowed: ${maxDate}.`;
-    }
-
-    return null;
-  }
-
-  // ── Send message ──────────────────────────────────────────────────────────
-
-  async function send(text?: string) {
-    const raw = (text ?? input).trim();
-    if (!raw || sending) return;
-
-    if (tab !== "chat") setTab("chat");
-    setInput("");
-
-    if (flowId && flowNodes.length > 0) {
-      const currentNode = flowNodes[flowNodeIdx - 1];
-      if (currentNode?.type === "collect") {
-        const err = validateFlowInput(raw, currentNode);
-        if (err) { setFlowFieldError(err); return; }
-        setFlowFieldError(null);
-      }
-      setMsgs((prev) => [
-        ...prev,
-        { id: crypto.randomUUID(), role: "user", content: raw },
-      ]);
-      const fieldName = currentNode?.data?.fieldName ?? "answer";
-      await advanceFlow(raw, fieldName);
-      return;
-    }
-
-    setMsgs((prev) => [
-      ...prev,
-      { id: crypto.randomUUID(), role: "user", content: raw },
-    ]);
-
-    setSending(true);
-    try {
-      const res = await fetch(`${API_URL}/api/chat/message`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": apiKey,
-        },
-        body: JSON.stringify({ content: raw, conversationId: convId ?? undefined }),
-      });
-      const data = await res.json();
-      const d = data?.data ?? data;
-      if (d?.conversationId) setConvId(d.conversationId);
-
-      if (d?.action === "invoke_flow" && d?.flowId) {
-        await startFlow(d.flowId);
-      } else {
-        const reply = d?.message?.content ?? d?.content ?? "…";
-        addBotMsg(reply);
-      }
-    } catch {
-      addBotMsg("Something went wrong. Try again.");
-    } finally {
-      setSending(false);
-    }
-  }
-
-  async function pickChoice(option: { id: string; label: string; value: string }) {
-    setMsgs((prev) => [
-      ...prev,
-      { id: crypto.randomUUID(), role: "user", content: option.label },
-    ]);
-    const currentNode = flowNodes[flowNodeIdx - 1];
-    const fieldName = currentNode?.data?.fieldName ?? "choice";
-    await advanceFlow(option.value, fieldName);
   }
 
   function openChat() {
     setTab("chat");
-    if (msgs.length === 0) addBotMsg(config.welcomeMessage || "Hi! How can I help?");
+    if (msgs.length === 0) addBotMsg(cfg?.welcomeMessage || "Hi! How can I help?");
   }
 
-  // ── Bot avatar ────────────────────────────────────────────────────────────
-
-  function BotAvatar({ size = 28 }: { size?: number }) {
-    return C.launcherIconUrl || config.botAvatarUrl ? (
-      <img
-        src={config.botAvatarUrl!}
-        alt=""
-        style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }}
-      />
-    ) : (
-      <div
-        style={{
-          width: size,
-          height: size,
-          borderRadius: "50%",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          backgroundColor: C.accent + "20",
-          flexShrink: 0,
-          fontSize: size * 0.5,
-        }}
-      >
-        {config.botAvatarEmoji}
-      </div>
-    );
+  function endFlow() {
+    setFlowDone(true); setFlowId(null); setFlowNodes([]); setFlowEdges([]); setFlowCurrentId(null);
   }
 
-  // ── Tab config ─────────────────────────────────────────────────────────────
+  // Walk the flow by following edges from a node, pausing at collect/choice nodes.
+  async function runFlowFrom(
+    startId: string | null,
+    nodes: FlowNode[],
+    edges: FlowEdge[],
+    answers: Record<string, string>,
+    fId: string,
+  ) {
+    const nextId = (id: string, handle?: string) => {
+      // Prefer an edge whose sourceHandle matches (choice branches); else first edge from node
+      const matches = edges.filter(e => e.source === id);
+      const byHandle = handle ? matches.find(e => e.sourceHandle === handle) : null;
+      return (byHandle ?? matches[0])?.target ?? null;
+    };
 
-  const tabs = [
-    { id: "chat" as const, label: "Chat", icon: Icon.MessageSquareSm },
-    { id: "home" as const, label: "Home", icon: Icon.Home },
-    ...(config.showHelpCenter
-      ? [{ id: "help" as const, label: "Help", icon: Icon.BookOpen }]
-      : []),
-  ];
+    let id: string | null = startId;
+    const guard = new Set<string>(); // prevent infinite loops on cyclic graphs
+    while (id && !guard.has(id)) {
+      guard.add(id);
+      const node = nodes.find(n => n.id === id);
+      if (!node) break;
+      if (node.type === "collect") {
+        setFlowCurrentId(id);
+        addBotMsg(node.data.question || `Please enter your ${node.data.fieldName || "answer"}`);
+        return;
+      }
+      if (node.type === "choice") {
+        setFlowCurrentId(id);
+        setMsgs(p => [...p, { id: crypto.randomUUID(), role: "bot", content: node.data.question || "Choose:", choices: node.data.options ?? [] }]);
+        return;
+      }
+      if (node.type === "message") { addBotMsg(node.data.message || ""); id = nextId(id); continue; }
+      if (node.type === "end") { addBotMsg(node.data.message || "Thanks! 🎉"); endFlow(); return; }
+      if (["lead_save", "webhook", "google_sheet"].includes(node.type)) {
+        try { await fetch(`${apiUrl}/flows/public/${fId}/submit`, { method: "POST", headers: { "Content-Type": "application/json", "x-api-key": apiKey }, body: JSON.stringify({ data: answers }) }); } catch {}
+        id = nextId(id); continue;
+      }
+      // start / unknown node types → just follow the edge
+      id = nextId(id);
+    }
+    // Exhausted with no interactive node — never leave the user stuck
+    endFlow();
+  }
 
-  const starters = (config.conversationStarters ?? []).filter((s) => s.label?.trim());
-  const qr = (config.widgetQuickReplies ?? []).filter((q) => q.label?.trim());
-  const articles = (config.helpArticles ?? []).filter((a) => a.title?.trim());
+  async function startFlow(fId: string) {
+    try {
+      const res = await fetch(`${apiUrl}/flows/public/${fId}`, { headers: { "x-api-key": apiKey } });
+      const data = await res.json(); const d = data?.data ?? data;
+      const nodes: FlowNode[] = d.nodes ?? [];
+      const edges: FlowEdge[] = d.edges ?? [];
+      if (!nodes.length) { addBotMsg("Thanks! Is there anything else I can help with?"); return; }
+      setFlowId(fId); setFlowNodes(nodes); setFlowEdges(edges); setFlowAnswers({}); setFlowDone(false); setFlowCurrentId(null);
+      const startNode = nodes.find(n => n.type === "start") ?? nodes[0];
+      await runFlowFrom(startNode.id, nodes, edges, {}, fId);
+    } catch { addBotMsg("Couldn't load that flow. Please try again."); }
+  }
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  async function send(text?: string) {
+    const raw = (text ?? input).trim();
+    if (!raw || sending) return;
+    if (tab !== "chat") setTab("chat");
+    setInput("");
+    setMsgs(p => [...p, { id: crypto.randomUUID(), role: "user", content: raw }]);
+    setSending(true);
+    try {
+      const res = await fetch(`${apiUrl}/chat/message`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-api-key": apiKey },
+        body: JSON.stringify({ content: raw, conversationId: convId ?? undefined }),
+      });
+      const data = await res.json(); const d = data?.data ?? data;
+      if (d?.conversationId) setConvId(d.conversationId);
+      if (d?.action === "invoke_flow" && d?.flowId) { await startFlow(d.flowId); }
+      else { addBotMsg(d?.message?.content ?? d?.content ?? "…"); }
+    } catch { addBotMsg("Something went wrong. Try again."); }
+    finally { setSending(false); }
+  }
+
+  async function pickChoice(opt: { id: string; label: string; value: string }) {
+    if (!flowId) return;
+    const node = flowNodes.find(n => n.id === flowCurrentId);
+    setMsgs(p => [...p, { id: crypto.randomUUID(), role: "user", content: opt.label }]);
+    const answers = { ...flowAnswers, [node?.data?.fieldName ?? "choice"]: opt.value };
+    setFlowAnswers(answers);
+    const next = node ? flowEdges.filter(e => e.source === node.id) : [];
+    // Branch by option if the edge carries a matching sourceHandle, else the single outgoing edge
+    const target = (next.find(e => e.sourceHandle === opt.id || e.sourceHandle === opt.value) ?? next[0])?.target ?? null;
+    await runFlowFrom(target, flowNodes, flowEdges, answers, flowId);
+  }
+
+  // Submit a validated flow collect value (validation handled in FlowCollectForm via zod)
+  function submitFlowValue(value: string) {
+    if (sending || !flowId) return;
+    const node = flowNodes.find(n => n.id === flowCurrentId);
+    if (node?.type !== "collect") return;
+    const val = (value ?? "").trim();
+    setMsgs(p => [...p, { id: crypto.randomUUID(), role: "user", content: val || "Skipped" }]);
+    const answers = { ...flowAnswers, [node.data?.fieldName ?? "answer"]: val };
+    setFlowAnswers(answers);
+    const target = flowEdges.find(e => e.source === node.id)?.target ?? null;
+    runFlowFrom(target, flowNodes, flowEdges, answers, flowId);
+  }
+
+  // Voice input via Web Speech API (no library)
+  function toggleVoice() {
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) return;
+    if (listening) { recognitionRef.current?.stop(); return; }
+    const rec = new SR();
+    rec.lang = navigator.language || "en-US";
+    rec.interimResults = true;
+    rec.continuous = false;
+    rec.onresult = (e: any) => {
+      let txt = "";
+      for (let i = 0; i < e.results.length; i++) txt += e.results[i][0].transcript;
+      setInput(txt);
+    };
+    rec.onend = () => setListening(false);
+    rec.onerror = () => setListening(false);
+    recognitionRef.current = rec;
+    setListening(true);
+    try { rec.start(); } catch { setListening(false); }
+  }
+
+  function Avatar({ size }: { size: number }) {
+    const fs = Math.round(size * 0.5);
+    return cfg?.botAvatarUrl
+      ? <img src={cfg.botAvatarUrl} alt="" style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+      : <div style={{ width: size, height: size, borderRadius: "50%", background: `linear-gradient(135deg, ${shade(C.accent, 30)}, ${C.accent})`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: fs, color: "#fff" }}>{cfg?.botAvatarEmoji ?? "💬"}</div>;
+  }
+
+  const currentFlowNode = inFlow ? flowNodes.find(n => n.id === flowCurrentId) ?? null : null;
+  const collectNode = currentFlowNode?.type === "collect" ? currentFlowNode : null;
+  const inCollect = !!collectNode;
+  const awaitingChoice = currentFlowNode?.type === "choice";
+  const voiceSupported = typeof window !== "undefined" && !!((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
 
   return (
-    <div style={{ fontFamily: "system-ui,-apple-system,BlinkMacSystemFont,sans-serif" }}>
-
+    <div ref={rootRef} style={{ ["--ab-accent" as any]: C.accent }}>
       {/* Proactive bubbles */}
       {!open && proactiveBubbles.length > 0 && (
-        <div
-          style={{
-            position: "fixed",
-            zIndex: 9999,
-            bottom: 88,
-            display: "flex",
-            flexDirection: "column",
-            gap: 8,
-            alignItems: "flex-end",
-            maxWidth: 280,
-            ...posStyle,
-          }}
-        >
+        <div style={{ position: "fixed", zIndex: 2147483646, bottom: 94, display: "flex", flexDirection: "column", gap: 9, alignItems: "flex-end", maxWidth: 300, ...pos }}>
           {proactiveBubbles.map((text, i) => (
-            <button
-              key={i}
-              onClick={openWidget}
-              style={{
-                background: "#fff",
-                border: "1px solid #e5e7eb",
-                borderRadius: 16,
-                padding: "10px 14px",
-                boxShadow: "0 4px 20px rgba(0,0,0,0.12)",
-                fontSize: 13,
-                color: "#111",
-                textAlign: "left",
-                cursor: "pointer",
-                maxWidth: 280,
-                lineHeight: 1.4,
-                fontFamily: "inherit",
-                animation: "ab-pop 0.22s ease",
-              }}
-            >
+            <button key={i} onClick={openWidget}
+              style={{ background: "#fff", border: "none", borderRadius: "18px 18px 5px 18px", padding: "12px 16px", boxShadow: "0 10px 30px -6px rgba(0,0,0,0.18), 0 2px 6px rgba(0,0,0,0.06)", fontSize: 13.5, fontWeight: 500, color: "#1a1f29", cursor: "pointer", maxWidth: 300, lineHeight: 1.45, fontFamily: "inherit", textAlign: "left", animation: "ab-bubble 0.42s cubic-bezier(.34,1.56,.64,1) both", transition: "transform 0.15s ease, box-shadow 0.15s ease" }}
+              onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-2px) scale(1.02)"; e.currentTarget.style.boxShadow = "0 14px 34px -6px rgba(0,0,0,0.24), 0 2px 6px rgba(0,0,0,0.08)"; }}
+              onMouseLeave={e => { e.currentTarget.style.transform = "none"; e.currentTarget.style.boxShadow = "0 10px 30px -6px rgba(0,0,0,0.18), 0 2px 6px rgba(0,0,0,0.06)"; }}>
               {text}
             </button>
           ))}
-          <button
-            onClick={clearProactive}
-            style={{
-              background: "none",
-              border: "none",
-              fontSize: 11,
-              color: "#9ca3af",
-              cursor: "pointer",
-              padding: "2px 4px",
-              fontFamily: "inherit",
-            }}
-          >
-            Dismiss
+          <button onClick={clearProactive} aria-label="Dismiss messages"
+            style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "rgba(17,24,39,0.82)", backdropFilter: "blur(4px)", color: "#fff", border: "none", borderRadius: 999, fontSize: 11.5, fontWeight: 500, padding: "5px 11px 5px 12px", cursor: "pointer", fontFamily: "inherit", boxShadow: "0 4px 14px rgba(0,0,0,0.18)", animation: "ab-fade 0.3s ease both", transition: "background 0.15s ease" }}
+            onMouseEnter={e => (e.currentTarget.style.background = "rgba(17,24,39,0.95)")} onMouseLeave={e => (e.currentTarget.style.background = "rgba(17,24,39,0.82)")}>
+            Dismiss <Icons.X s={11} />
           </button>
         </div>
+      )}
+
+      {/* Spinning halo around the launcher while config loads */}
+      {loading && !open && (
+        <div aria-hidden style={{ position: "fixed", bottom: 20, zIndex: 2147483646, width: 68, height: 68, borderRadius: "50%", border: `3px solid ${C.launcherBg}2e`, borderTopColor: C.launcherBg, animation: "ab-spin 0.7s linear infinite", pointerEvents: "none", ...(cfg?.widgetPosition === "bottom-left" ? { left: 20 } : { right: 20 }) }} />
       )}
 
       {/* Launcher FAB */}
       <button
         onClick={() => (open ? setOpen(false) : openWidget())}
-        style={{
-          position: "fixed",
-          bottom: 24,
-          zIndex: 9999,
-          width: 56,
-          height: 56,
-          borderRadius: "50%",
-          backgroundColor: C.launcherBg,
-          border: "none",
-          cursor: "pointer",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          boxShadow: "0 4px 20px rgba(0,0,0,0.2)",
-          transition: "transform 0.15s",
-          ...posStyle,
-        }}
-        onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = "scale(1.05)"; }}
-        onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = "scale(1)"; }}
-        title={open ? "Close chat" : "Open chat"}
+        aria-label="Open chat"
+        style={{ position: "fixed", bottom: 24, zIndex: 2147483647, width: 60, height: 60, borderRadius: "50%", background: `linear-gradient(135deg, ${shade(C.launcherBg, 24)}, ${C.launcherBg})`, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 8px 24px ${C.launcherBg}66, 0 2px 8px rgba(0,0,0,0.18)`, transition: "transform 0.18s cubic-bezier(.34,1.56,.64,1)", color: "#fff", ...pos }}
+        onMouseEnter={e => (e.currentTarget.style.transform = "scale(1.08)")}
+        onMouseLeave={e => (e.currentTarget.style.transform = "scale(1)")}
       >
-        {open ? (
-          <span style={{ color: "#fff", display: "flex" }}><Icon.X /></span>
-        ) : C.launcherIconUrl ? (
-          <img src={C.launcherIconUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "50%" }} />
-        ) : (
-          <span style={{ fontSize: 24 }}>{config.botAvatarEmoji}</span>
-        )}
+        {open ? <Icons.X s={22} />
+          : C.launcherIconUrl ? <img src={C.launcherIconUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "50%" }} />
+            : <span style={{ fontSize: 26, lineHeight: 1 }}>{cfg?.botAvatarEmoji ?? "💬"}</span>}
         {!open && proactiveBubbles.length > 0 && (
-          <span style={{
-            position: "absolute",
-            top: 2,
-            right: 2,
-            width: 14,
-            height: 14,
-            background: "#ef4444",
-            borderRadius: "50%",
-            border: "2px solid #fff",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 8,
-            color: "#fff",
-            fontWeight: 700,
-          }}>
-            {proactiveBubbles.length}
-          </span>
+          <span style={{ position: "absolute", top: 0, right: 0, minWidth: 18, height: 18, padding: "0 5px", background: "#ef4444", borderRadius: 999, border: "2px solid #fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "#fff", fontWeight: 700 }}>{proactiveBubbles.length}</span>
         )}
       </button>
 
       {/* Widget panel */}
       {open && (
-        <div
-          style={{
-            position: "fixed",
-            bottom: 88,
-            zIndex: 9998,
-            width: 360,
-            height: 560,
-            display: "flex",
-            flexDirection: "column",
-            overflow: "hidden",
-            boxShadow: "0 20px 60px rgba(0,0,0,0.18)",
-            borderRadius: 20,
-            border: "1px solid rgba(0,0,0,0.08)",
-            background: "#fff",
-            ...posStyle,
-          }}
-        >
+        <div ref={panelRef} style={{ position: "fixed", bottom: 96, zIndex: 2147483646, width: 384, maxWidth: "calc(100vw - 32px)", height: 620, maxHeight: "calc(100vh - 120px)", display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 24px 60px -12px rgba(0,0,0,0.3), 0 0 0 1px rgba(0,0,0,0.04)", borderRadius: 20, background: surface, ...pos }}>
 
-          {/* Header */}
-          <div style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-            padding: "12px 16px",
-            backgroundColor: C.headerBg,
-            flexShrink: 0,
-          }}>
-            {config.botAvatarUrl ? (
-              <img src={config.botAvatarUrl} alt="" style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
-            ) : (
-              <div style={{
-                width: 36, height: 36, borderRadius: "50%",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                backgroundColor: C.headerText + "25", flexShrink: 0, fontSize: 16,
-              }}>
-                {config.botAvatarEmoji}
+        {/* ── Loading state ── */}
+        {loading ? (
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16, background: "#fff" }}>
+            <div style={{ width: 34, height: 34, borderRadius: "50%", border: "3px solid #ececf1", borderTopColor: C.accent, animation: "ab-spin 0.8s linear infinite" }} />
+            <p style={{ fontSize: 13, color: "#9aa1ac", margin: 0 }}>Loading…</p>
+          </div>
+        ) : loadError ? (
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, padding: 24, textAlign: "center", background: "#fff" }}>
+            <p style={{ fontSize: 14, fontWeight: 600, color: "#1a1f29", margin: 0 }}>Couldn't connect</p>
+            <p style={{ fontSize: 12.5, color: "#9aa1ac", margin: 0, lineHeight: 1.5 }}>Please check your connection and try again.</p>
+          </div>
+        ) : (
+          <>
+            {/* Header */}
+            <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 11, padding: "13px 14px 13px 16px", background: headerGrad, flexShrink: 0 }}>
+              <div style={{ position: "relative", flexShrink: 0 }}>
+                <Avatar size={38} />
+                <span style={{ position: "absolute", bottom: -1, right: -1, width: 10, height: 10, borderRadius: "50%", background: "#22c55e", border: `2px solid ${C.headerBg}` }} />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ color: C.headerText, fontWeight: 700, fontSize: 15, margin: 0, lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cfg?.name ?? "Assistant"}</p>
+                <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 2 }}>
+                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#4ade80", flexShrink: 0, animation: "ab-pulse 2s ease-in-out infinite" }} />
+                  <span style={{ color: C.headerText, opacity: 0.85, fontSize: 12, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cfg?.botSubtitle || "Online"}</span>
+                </div>
+              </div>
+              <button onClick={() => setOpen(false)} aria-label="Close" style={{ flexShrink: 0, width: 30, height: 30, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,0.15)", border: "none", cursor: "pointer", color: C.headerText, transition: "background 0.15s" }}
+                onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.3)")} onMouseLeave={e => (e.currentTarget.style.background = "rgba(255,255,255,0.15)")}>
+                <Icons.X s={16} />
+              </button>
+            </div>
+
+            {/* ── HOME TAB ── */}
+            {tab === "home" && (
+              <div className="ab-scroll" style={{ flex: 1, overflowY: "auto", background: C.chatBg }}>
+                <div style={{ padding: "22px 20px 18px" }}>
+                  <p style={{ fontSize: 20, fontWeight: 800, color: foreground, lineHeight: 1.3, margin: 0, letterSpacing: "-0.01em" }}>{cfg?.homeGreeting || "Hi there 👋"}</p>
+                  <p style={{ fontSize: 13.5, color: mutedText, margin: "6px 0 0", lineHeight: 1.45 }}>{cfg?.homeSubgreeting || "How can we help you today?"}</p>
+                </div>
+                <div style={{ padding: "0 16px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
+                  <button onClick={openChat} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", padding: "15px 16px", borderRadius: 16, background: `linear-gradient(135deg, ${shade(C.accent, 22)}, ${C.accent})`, color: "#fff", border: "none", cursor: "pointer", fontSize: 14.5, fontWeight: 600, fontFamily: "inherit", boxShadow: `0 6px 16px ${C.accent}40` }}>
+                    <span style={{ display: "flex", alignItems: "center", gap: 10 }}><Icons.Chat s={18} />Start a conversation</span>
+                    <Icons.ChevronRight />
+                  </button>
+                  {starters.length > 0 && <>
+                    <p style={{ fontSize: 11, fontWeight: 700, color: mutedText, textTransform: "uppercase", letterSpacing: "0.06em", margin: "10px 0 2px 2px" }}>Popular questions</p>
+                    {starters.map((s, i) => (
+                      <button key={i} onClick={() => send(s.message || s.label)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, width: "100%", padding: "13px 15px", borderRadius: 14, background: surface, color: foreground, border: `1px solid ${borderColor}`, cursor: "pointer", fontSize: 13.5, textAlign: "left", fontFamily: "inherit", transition: "border-color 0.15s, transform 0.1s" }}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor = C.accent; }} onMouseLeave={e => { e.currentTarget.style.borderColor = borderColor; }}>
+                        <span>{s.label}</span><span style={{ color: C.accent, flexShrink: 0 }}><Icons.ChevronRight /></span>
+                      </button>
+                    ))}
+                  </>}
+                  {cfg?.showHelpCenter && articles.length > 0 && <>
+                    <p style={{ fontSize: 11, fontWeight: 700, color: mutedText, textTransform: "uppercase", letterSpacing: "0.06em", margin: "10px 0 2px 2px" }}>{cfg?.helpCenterTitle || "Help center"}</p>
+                    {articles.slice(0, 3).map((a, i) => (
+                      <a key={i} href={a.url ?? "#"} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "13px 15px", borderRadius: 14, background: surface, color: foreground, border: `1px solid ${borderColor}`, textDecoration: "none", fontSize: 13.5 }}>
+                        <span>{a.title}</span><span style={{ color: C.accent, flexShrink: 0 }}><Icons.ChevronRight /></span>
+                      </a>
+                    ))}
+                  </>}
+                </div>
               </div>
             )}
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <p style={{ color: C.headerText, fontWeight: 600, fontSize: 14, margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {config.name}
-              </p>
-              <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2 }}>
-                <span style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: "#4ade80", display: "inline-block" }} />
-                <span style={{ fontSize: 11, color: C.headerText, opacity: 0.75 }}>
-                  {config.botSubtitle || "Online"}
-                </span>
-              </div>
-            </div>
-            <button
-              onClick={() => setOpen(false)}
-              style={{ background: "none", border: "none", cursor: "pointer", color: C.headerText, opacity: 0.7, display: "flex", padding: 4 }}
-              onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.opacity = "1"; }}
-              onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.opacity = "0.7"; }}
-            >
-              <Icon.X />
-            </button>
-          </div>
 
-          {/* HOME TAB */}
-          {tab === "home" && (
-            <div style={{ flex: 1, overflowY: "auto", backgroundColor: C.chatBg, scrollbarWidth: "none" }}>
-              {/* Greeting hero */}
-              <div style={{ padding: "24px 20px 20px", backgroundColor: C.headerBg + "12" }}>
-                <p style={{ fontSize: 18, fontWeight: 700, color: "#111827", lineHeight: 1.3, margin: 0 }}>
-                  {config.homeGreeting}
-                </p>
-                <p style={{ fontSize: 13, color: "#6b7280", marginTop: 6, margin: "6px 0 0" }}>
-                  {config.homeSubgreeting}
-                </p>
-              </div>
-
-              <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 8 }}>
-                {/* Start chat CTA */}
-                <button
-                  onClick={openChat}
-                  style={{
-                    display: "flex", alignItems: "center", justifyContent: "space-between",
-                    width: "100%", padding: "12px 16px", borderRadius: C.radius,
-                    backgroundColor: C.accent, color: "#fff", border: "none",
-                    cursor: "pointer", fontSize: 14, fontWeight: 600, fontFamily: "inherit",
-                  }}
-                >
-                  <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <Icon.MessageSquareSm /> Start a conversation
-                  </span>
-                  <Icon.ChevronRight />
-                </button>
-
-                {/* Conversation starters */}
-                {starters.length > 0 && (
-                  <>
-                    <p style={{ fontSize: 11, fontWeight: 600, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.05em", margin: "12px 0 4px", padding: "0 4px" }}>
-                      Ask us anything
-                    </p>
-                    {starters.map((s, i) => (
-                      <button
-                        key={i}
-                        onClick={() => send(s.message || s.label)}
-                        style={{
-                          display: "flex", alignItems: "center", justifyContent: "space-between",
-                          width: "100%", padding: "12px 16px", borderRadius: C.radius,
-                          backgroundColor: "#fff", color: "#111827",
-                          border: "1px solid #e5e7eb", cursor: "pointer",
-                          fontSize: 13, textAlign: "left", fontFamily: "inherit",
-                        }}
-                      >
-                        <span>{s.label}</span>
-                        <span style={{ color: "#9ca3af", flexShrink: 0 }}><Icon.ChevronRight /></span>
-                      </button>
-                    ))}
-                  </>
-                )}
-
-                {/* Help preview */}
-                {config.showHelpCenter && articles.length > 0 && (
-                  <>
-                    <p style={{ fontSize: 11, fontWeight: 600, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.05em", margin: "12px 0 4px", padding: "0 4px", display: "flex", alignItems: "center", gap: 6 }}>
-                      <Icon.BookOpen /> {config.helpCenterTitle}
-                    </p>
-                    {articles.slice(0, 3).map((a, i) => (
-                      <a
-                        key={i}
-                        href={a.url ?? "#"}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{
-                          display: "flex", alignItems: "center", justifyContent: "space-between",
-                          padding: "12px 16px", borderRadius: C.radius,
-                          backgroundColor: "#fff", color: "#111827",
-                          border: "1px solid #e5e7eb", textDecoration: "none", fontSize: 13,
-                        }}
-                      >
-                        <span>{a.title}</span>
-                        <span style={{ color: "#9ca3af", flexShrink: 0 }}><Icon.ChevronRight /></span>
-                      </a>
-                    ))}
-                    {config.helpCenterUrl && (
-                      <a
-                        href={config.helpCenterUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{ fontSize: 12, fontWeight: 500, color: C.accent, display: "flex", alignItems: "center", gap: 4, padding: "4px 4px", textDecoration: "none" }}
-                      >
-                        View all articles <Icon.ChevronRight />
-                      </a>
-                    )}
-                  </>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* CHAT TAB */}
-          {tab === "chat" && (
-            <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, backgroundColor: C.chatBg }}>
-              {/* Messages */}
-              <div
-                style={{
-                  flex: 1,
-                  overflowY: "auto",
-                  padding: "12px 16px",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 12,
-                  scrollbarWidth: "none",
-                }}
-              >
-                {msgs.length === 0 && (
-                  <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
-                    <BotAvatar />
-                    <div style={{ backgroundColor: C.botBg, borderRadius: C.radius, borderTopLeftRadius: 4, padding: "10px 12px", maxWidth: "80%" }}>
-                      <MdText text={config.welcomeMessage || "Hi! How can I help?"} accent={C.accent} fontSize={C.fontSize} />
+            {/* ── CHAT TAB ── */}
+            {tab === "chat" && (
+              <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, background: C.chatBg }}>
+                <div className="ab-scroll" style={{ flex: 1, overflowY: "auto", padding: "16px 16px 8px", display: "flex", flexDirection: "column", gap: 12 }}>
+                  {msgs.length === 0 && (
+                    <div style={{ display: "flex", alignItems: "flex-end", gap: 8 }}>
+                      <Avatar size={28} />
+                      <div style={{ background: C.botBg, color: C.botText, borderRadius: `${C.radius}px ${C.radius}px ${C.radius}px 5px`, padding: "11px 14px", maxWidth: "82%", boxShadow: "0 1px 2px rgba(0,0,0,0.05)", border: `1px solid ${borderColor}` }}>
+                        <BotMarkdown text={cfg?.welcomeMessage || "Hi! How can I help?"} fontSize={C.fontSize} />
+                      </div>
                     </div>
-                  </div>
-                )}
-
-                {msgs.map((m) => (
-                  <div key={m.id} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    <div style={{ display: "flex", gap: 10, justifyContent: m.role === "user" ? "flex-end" : "flex-start", alignItems: "flex-start" }}>
-                      {m.role === "bot" && <BotAvatar />}
-                      <div style={{ display: "flex", flexDirection: "column", gap: 2, maxWidth: "80%" }}>
-                        <div style={{
-                          borderRadius: C.radius,
-                          ...(m.role === "user"
-                            ? { borderTopRightRadius: 4, backgroundColor: C.userBg, color: C.userText }
-                            : { borderTopLeftRadius: 4, backgroundColor: C.botBg, color: C.botText }),
-                          padding: "10px 12px",
-                          fontSize: C.fontSize,
-                          lineHeight: 1.5,
-                        }}>
-                          {m.role === "bot"
-                            ? <MdText text={m.content} accent={C.accent} fontSize={C.fontSize} />
-                            : m.content}
+                  )}
+                  {msgs.map(m => (
+                    <div key={m.id} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      <div style={{ display: "flex", gap: 8, justifyContent: m.role === "user" ? "flex-end" : "flex-start", alignItems: "flex-end" }}>
+                        {m.role === "bot" && <Avatar size={28} />}
+                        <div style={{ display: "flex", flexDirection: "column", gap: 3, maxWidth: "82%", alignItems: m.role === "user" ? "flex-end" : "flex-start" }}>
+                          <div style={{
+                            padding: "11px 14px", fontSize: C.fontSize, lineHeight: 1.55,
+                            ...(m.role === "user"
+                              ? { borderRadius: `${C.radius}px ${C.radius}px 5px ${C.radius}px`, background: `linear-gradient(135deg, ${shade(C.userBg, 18)}, ${C.userBg})`, color: C.userText, boxShadow: `0 2px 8px ${C.userBg}33` }
+                              : { borderRadius: `${C.radius}px ${C.radius}px ${C.radius}px 5px`, background: C.botBg, color: C.botText, boxShadow: "0 1px 2px rgba(0,0,0,0.05)", border: `1px solid ${borderColor}` }),
+                          }}>
+                            {m.role === "bot" ? <BotMarkdown text={m.content} fontSize={C.fontSize} /> : m.content}
+                          </div>
+                          {C.showTimestamps && <span style={{ fontSize: 10, color: mutedText, padding: "0 4px" }}>{new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>}
                         </div>
-                        {C.showTimestamps && (
-                          <p style={{ fontSize: 10, color: "#9ca3af", margin: 0, padding: "0 4px", textAlign: m.role === "user" ? "right" : "left" }}>
-                            {new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                          </p>
-                        )}
                       </div>
+                      {m.choices && m.choices.length > 0 && awaitingChoice && m.id === msgs[msgs.length - 1]?.id && (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 6, paddingLeft: 36, alignItems: "flex-start" }}>
+                          {m.choices.map(opt => (
+                            <button key={opt.id} onClick={() => pickChoice(opt)} style={{ textAlign: "left", fontSize: 13, fontWeight: 500, padding: "9px 14px", borderRadius: 999, border: `1.5px solid ${C.accent}`, color: C.accent, background: surface, cursor: "pointer", fontFamily: "inherit", transition: "all 0.15s" }}
+                              onMouseEnter={e => { e.currentTarget.style.background = C.accent; e.currentTarget.style.color = "#fff"; }} onMouseLeave={e => { e.currentTarget.style.background = surface; e.currentTarget.style.color = C.accent; }}>
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
-
-                    {/* Flow choice buttons */}
-                    {m.choices && m.choices.length > 0 && inFlow && (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 6, paddingLeft: 38 }}>
-                        {m.choices.map((opt) => (
-                          <button
-                            key={opt.id}
-                            onClick={() => pickChoice(opt)}
-                            style={{
-                              textAlign: "left", fontSize: 13, padding: "8px 12px",
-                              borderRadius: C.radius, border: `1px solid ${C.accent}60`,
-                              color: C.accent, background: "none", cursor: "pointer",
-                              fontFamily: "inherit", transition: "background 0.15s",
-                            }}
-                            onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = C.accent + "10"; }}
-                            onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent"; }}
-                          >
-                            {opt.label}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
-
-                {/* Typing indicator */}
-                {sending && (
-                  <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
-                    <BotAvatar />
-                    <div style={{ backgroundColor: C.botBg, borderRadius: C.radius, borderTopLeftRadius: 4, padding: "12px 14px", display: "flex", alignItems: "center", gap: 4 }}>
-                      {[0, 120, 240].map((delay, i) => (
-                        <span key={i} style={{
-                          width: 6, height: 6, borderRadius: "50%",
-                          backgroundColor: C.botText + "80",
-                          display: "inline-block",
-                          animation: `ab-bounce 1.2s ${delay}ms infinite`,
-                        }} />
-                      ))}
-                    </div>
-                  </div>
-                )}
-                <div ref={messagesEnd} />
-              </div>
-
-              {/* Flow collect input */}
-              {(() => {
-                const currentNode = inFlow ? flowNodes[flowNodeIdx - 1] : null;
-                if (!currentNode || currentNode.type !== "collect") return null;
-                const { fieldType = "text", placeholder, helpText } = currentNode.data ?? {};
-                const isLong = fieldType === "longtext";
-
-                const inputStyle: React.CSSProperties = {
-                  width: "100%",
-                  border: "1.5px solid #e5e7eb",
-                  borderRadius: 12,
-                  padding: "8px 12px",
-                  fontSize: 13,
-                  outline: "none",
-                  fontFamily: "inherit",
-                  resize: "none",
-                  color: "#111827",
-                  background: "#fff",
-                };
-
-                return (
-                  <div style={{ padding: "8px 12px 12px", flexShrink: 0, borderTop: "1px solid #e5e7eb", backgroundColor: "#fff", display: "flex", flexDirection: "column", gap: 6 }}>
-                    {isLong ? (
-                      <textarea
-                        autoFocus rows={3} value={flowFieldValue}
-                        onChange={(e) => { setFlowFieldValue(e.target.value); setFlowFieldError(null); }}
-                        placeholder={placeholder || "Type your answer…"}
-                        style={inputStyle}
-                      />
-                    ) : (
-                      <input
-                        autoFocus
-                        type={
-                          fieldType === "email" ? "email"
-                          : fieldType === "phone" ? "tel"
-                          : fieldType === "number" ? "number"
-                          : fieldType === "url" ? "url"
-                          : fieldType === "date" ? "date"
-                          : "text"
-                        }
-                        value={flowFieldValue}
-                        onChange={(e) => { setFlowFieldValue(e.target.value); setFlowFieldError(null); }}
-                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); send(flowFieldValue); } }}
-                        placeholder={placeholder || "Type your answer…"}
-                        min={currentNode.data?.min}
-                        max={currentNode.data?.max}
-                        step={currentNode.data?.step}
-                        style={inputStyle}
-                      />
-                    )}
-                    {flowFieldError && <p style={{ fontSize: 11, color: "#ef4444", margin: 0 }}>{flowFieldError}</p>}
-                    {helpText && !flowFieldError && <p style={{ fontSize: 11, color: "#6b7280", margin: 0 }}>{helpText}</p>}
-                    <button
-                      onClick={() => send(flowFieldValue)}
-                      disabled={!flowFieldValue.trim()}
-                      style={{
-                        height: 32, borderRadius: 12, fontSize: 13, fontWeight: 600,
-                        color: "#fff", backgroundColor: C.accent, border: "none",
-                        cursor: "pointer", fontFamily: "inherit", opacity: flowFieldValue.trim() ? 1 : 0.4,
-                      }}
-                    >
-                      Continue →
-                    </button>
-                  </div>
-                );
-              })()}
-
-              {/* Quick reply chips */}
-              {qr.length > 0 && !inFlow && msgs.length > 0 && showQuickReplies && (
-                <div style={{ padding: "8px 12px 4px", display: "flex", gap: 6, flexWrap: "wrap", borderTop: "1px solid #e5e7eb" }}>
-                  {qr.map((q, i) => (
-                    <button
-                      key={i}
-                      onClick={() => { send(q.label); setShowQuickReplies(false); }}
-                      style={{
-                        padding: "2px 10px", borderRadius: 999, fontSize: 11, fontWeight: 500,
-                        border: `1px solid ${C.accent}60`, color: C.accent,
-                        background: "none", cursor: "pointer", fontFamily: "inherit",
-                      }}
-                    >
-                      {q.label}
-                    </button>
                   ))}
+                  {sending && (
+                    <div style={{ display: "flex", alignItems: "flex-end", gap: 8 }}>
+                      <Avatar size={28} />
+                      <div style={{ background: C.botBg, borderRadius: `${C.radius}px ${C.radius}px ${C.radius}px 5px`, padding: "13px 16px", display: "flex", alignItems: "center", gap: 5, border: `1px solid ${borderColor}` }}>
+                        {[0, 150, 300].map((d, i) => <span key={i} style={{ width: 7, height: 7, borderRadius: "50%", background: C.accent, display: "inline-block", animation: `ab-bounce 1.3s ${d}ms infinite` }} />)}
+                      </div>
+                    </div>
+                  )}
+                  <div ref={messagesEnd} />
                 </div>
-              )}
 
-              {/* Main chat input */}
-              {!inFlow && (
-                <div style={{ padding: "8px 12px 12px", flexShrink: 0, borderTop: "1px solid #e5e7eb", backgroundColor: "#fff" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, border: "1.5px solid #e5e7eb", borderRadius: 12, padding: "6px 10px", backgroundColor: "#fff" }}>
-                    {qr.length > 0 && msgs.length > 0 && (
-                      <button
-                        onClick={() => setShowQuickReplies((v) => !v)}
-                        style={{ background: "none", border: "none", cursor: "pointer", color: "#9ca3af", display: "flex", padding: 2, flexShrink: 0 }}
-                        title="Quick replies"
-                      >
-                        <Icon.ChevronUp rotated={showQuickReplies} />
-                      </button>
-                    )}
-                    <input
-                      value={input}
-                      onChange={(e) => setInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
-                      }}
-                      placeholder={config.inputPlaceholder}
-                      disabled={sending}
-                      style={{
-                        flex: 1, background: "transparent", border: "none", outline: "none",
-                        fontSize: 13, color: "#111827", fontFamily: "inherit",
-                      }}
+                {/* Composer */}
+                <div style={{ flexShrink: 0, borderTop: `1px solid ${borderColor}`, background: surface }}>
+                  {/* Flow collect input — react-hook-form + zod validation */}
+                  {inCollect && collectNode ? (
+                    <FlowCollectForm
+                      key={collectNode.id}
+                      node={collectNode}
+                      sending={sending}
+                      colors={{ accent: C.accent, border: borderColor, inputBg, fg: foreground, muted: mutedText }}
+                      onSubmit={submitFlowValue}
                     />
-                    <button
-                      onClick={() => send()}
-                      disabled={!input.trim() || sending}
-                      style={{
-                        width: 28, height: 28, borderRadius: "50%", display: "flex",
-                        alignItems: "center", justifyContent: "center", flexShrink: 0,
-                        backgroundColor: C.accent, border: "none", cursor: "pointer",
-                        color: "#fff", opacity: input.trim() && !sending ? 1 : 0.4,
-                        transition: "opacity 0.15s",
-                      }}
-                    >
-                      <Icon.Send />
-                    </button>
-                  </div>
+                  ) : !awaitingChoice && (
+                    <>
+                      {/* Quick replies — compact chips, collapsible */}
+                      {qr.length > 0 && showQR && (
+                        <div className="ab-hscroll" style={{ display: "flex", gap: 7, padding: "10px 14px 2px", overflowX: "auto", scrollbarWidth: "none" }}>
+                          {qr.map((q, i) => (
+                            <button key={i} onClick={() => send(q.label)} style={{ flexShrink: 0, padding: "7px 14px", borderRadius: 999, fontSize: 12.5, fontWeight: 500, border: `1.5px solid ${C.accent}40`, color: C.accent, background: light ? C.accent + "0d" : "transparent", cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap", transition: "all 0.15s" }}
+                              onMouseEnter={e => { e.currentTarget.style.background = C.accent; e.currentTarget.style.color = "#fff"; e.currentTarget.style.borderColor = C.accent; }} onMouseLeave={e => { e.currentTarget.style.background = light ? C.accent + "0d" : "transparent"; e.currentTarget.style.color = C.accent; e.currentTarget.style.borderColor = C.accent + "40"; }}>
+                              {q.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {/* Input row */}
+                      <div style={{ padding: "8px 14px 14px", display: "flex", alignItems: "center", gap: 8 }}>
+                        {qr.length > 0 && (
+                          <button onClick={() => setShowQR(v => !v)} aria-label={showQR ? "Hide suggestions" : "Show suggestions"} title={showQR ? "Hide suggestions" : "Show suggestions"} style={{ flexShrink: 0, width: 36, height: 36, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", background: inputBg, border: "none", cursor: "pointer", color: mutedText, transition: "color 0.15s" }}
+                            onMouseEnter={e => (e.currentTarget.style.color = C.accent)} onMouseLeave={e => (e.currentTarget.style.color = mutedText)}>
+                            <Icons.Chevron s={16} dir={showQR ? "down" : "up"} />
+                          </button>
+                        )}
+                        <div style={{ flex: 1, display: "flex", alignItems: "center", background: inputBg, borderRadius: 999, padding: "3px 4px 3px 16px", border: `1.5px solid transparent`, transition: "border-color 0.15s", minWidth: 0 }}>
+                          <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} placeholder={listening ? "Listening…" : (cfg?.inputPlaceholder || "Type your message…")} disabled={sending} style={{ flex: 1, background: "transparent", border: "none", outline: "none", fontSize: 14, color: foreground, fontFamily: "inherit", padding: "8px 0", minWidth: 0 }}
+                            onFocus={e => (e.currentTarget.parentElement!.style.borderColor = C.accent)} onBlur={e => (e.currentTarget.parentElement!.style.borderColor = "transparent")} />
+                          {voiceSupported && !input.trim() && (
+                            <button onClick={toggleVoice} aria-label={listening ? "Stop voice input" : "Voice input"} title={listening ? "Stop" : "Speak"} style={{ width: 32, height: 32, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, background: listening ? "#ef4444" : "transparent", border: "none", cursor: "pointer", color: listening ? "#fff" : mutedText, transition: "color 0.15s, background 0.15s", animation: listening ? "ab-mic 1.2s ease-in-out infinite" : undefined }}
+                              onMouseEnter={e => { if (!listening) e.currentTarget.style.color = C.accent; }} onMouseLeave={e => { if (!listening) e.currentTarget.style.color = mutedText; }}>
+                              <Icons.Mic s={17} />
+                            </button>
+                          )}
+                          <button onClick={() => send()} disabled={!input.trim() || sending} aria-label="Send" style={{ width: 34, height: 34, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, background: `linear-gradient(135deg, ${shade(C.accent, 18)}, ${C.accent})`, border: "none", cursor: input.trim() && !sending ? "pointer" : "default", color: "#fff", opacity: input.trim() && !sending ? 1 : 0.4, transition: "opacity 0.15s, transform 0.1s" }}
+                            onMouseEnter={e => { if (input.trim() && !sending) e.currentTarget.style.transform = "scale(1.08)"; }} onMouseLeave={e => (e.currentTarget.style.transform = "scale(1)")}>
+                            <Icons.Send s={17} />
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
-              )}
+              </div>
+            )}
+
+            {/* ── HELP TAB ── */}
+            {tab === "help" && cfg?.showHelpCenter && (
+              <div className="ab-scroll" style={{ flex: 1, overflowY: "auto", padding: "18px 16px", display: "flex", flexDirection: "column", gap: 9, background: C.chatBg }}>
+                <p style={{ fontSize: 16, fontWeight: 700, color: foreground, margin: "0 0 6px" }}>{cfg?.helpCenterTitle || "Help center"}</p>
+                {articles.length === 0
+                  ? <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "56px 0", gap: 10, color: mutedText }}><Icons.Book s={28} /><p style={{ fontSize: 13, margin: 0 }}>No articles yet.</p></div>
+                  : articles.map((a, i) => <a key={i} href={a.url ?? "#"} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "14px 15px", borderRadius: 14, background: surface, color: foreground, border: `1px solid ${borderColor}`, textDecoration: "none", fontSize: 13.5 }}><span>{a.title}</span><span style={{ color: C.accent, flexShrink: 0 }}><Icons.ChevronRight /></span></a>)}
+              </div>
+            )}
+
+            {/* Footer */}
+            {(cfg?.showPoweredBy || cfg?.businessHoursText) && (
+              <div style={{ flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "7px 16px", borderTop: `1px solid ${borderColor}`, background: surface }}>
+                {cfg?.businessHoursText
+                  ? <span style={{ fontSize: 10.5, color: mutedText, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cfg.businessHoursText}</span>
+                  : <span />}
+                {cfg?.showPoweredBy && <a href={cfg?.footerLinkUrl || "#"} target={cfg?.footerLinkUrl ? "_blank" : undefined} rel="noopener noreferrer" style={{ fontSize: 10.5, color: mutedText, textDecoration: "none", flexShrink: 0 }}>{cfg?.footerText || "Powered by AskBase"}</a>}
+              </div>
+            )}
+
+            {/* Tab bar */}
+            <div style={{ flexShrink: 0, display: "flex", borderTop: `1px solid ${borderColor}`, background: surface }}>
+              {tabs.map(({ id, label, Icon }) => {
+                const active = tab === id;
+                return (
+                  <button key={id} onClick={() => (id === "chat" ? openChat() : setTab(id))}
+                    style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "6px 0 7px", fontSize: 10, fontWeight: 600, border: "none", background: "none", cursor: "pointer", fontFamily: "inherit", color: active ? C.accent : mutedText, transition: "color 0.15s" }}>
+                    <Icon s={17} />{label}
+                  </button>
+                );
+              })}
             </div>
-          )}
-
-          {/* HELP TAB */}
-          {tab === "help" && config.showHelpCenter && (
-            <div style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 8, backgroundColor: C.chatBg, scrollbarWidth: "none" }}>
-              <p style={{ fontSize: 13, fontWeight: 600, margin: "0 0 4px", display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ color: C.accent }}><Icon.BookOpen /></span>
-                {config.helpCenterTitle}
-              </p>
-
-              {articles.length === 0 ? (
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "48px 0", gap: 8, color: "#d1d5db" }}>
-                  <Icon.BookOpen />
-                  <p style={{ fontSize: 13, color: "#9ca3af", margin: 0 }}>No articles added yet.</p>
-                </div>
-              ) : (
-                articles.map((a, i) => (
-                  <a
-                    key={i}
-                    href={a.url ?? "#"}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{
-                      display: "flex", alignItems: "center", justifyContent: "space-between",
-                      padding: "12px 16px", borderRadius: C.radius,
-                      backgroundColor: "#fff", color: "#111827",
-                      border: "1px solid #e5e7eb", textDecoration: "none", fontSize: 13,
-                    }}
-                  >
-                    <span>{a.title}</span>
-                    <span style={{ color: "#9ca3af", flexShrink: 0 }}><Icon.ChevronRight /></span>
-                  </a>
-                ))
-              )}
-
-              {config.helpCenterUrl && (
-                <a
-                  href={config.helpCenterUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ fontSize: 12, fontWeight: 500, color: C.accent, display: "flex", alignItems: "center", gap: 4, padding: "4px 4px", textDecoration: "none", marginTop: 8 }}
-                >
-                  View all articles <Icon.ChevronRight />
-                </a>
-              )}
-            </div>
-          )}
-
-          {/* Footer */}
-          {(config.showPoweredBy || config.businessHoursText) && (
-            <div style={{ flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "6px 16px", borderTop: "1px solid #e5e7eb", backgroundColor: "#fff" }}>
-              {config.businessHoursText && (
-                <span style={{ fontSize: 10, color: "#9ca3af", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {config.businessHoursText}
-                </span>
-              )}
-              {config.showPoweredBy && (
-                <a
-                  href={config.footerLinkUrl || "#"}
-                  target={config.footerLinkUrl ? "_blank" : undefined}
-                  rel="noopener noreferrer"
-                  style={{ fontSize: 10, color: "#9ca3af", textDecoration: "none", marginLeft: "auto", flexShrink: 0 }}
-                >
-                  {config.footerText || "Powered by AskBase"}
-                </a>
-              )}
-            </div>
-          )}
-
-          {/* Tab bar */}
-          <div style={{ flexShrink: 0, display: "flex", borderTop: "1px solid #e5e7eb", backgroundColor: "#fff" }}>
-            {tabs.map(({ id, label, icon: TabIcon }) => (
-              <button
-                key={id}
-                onClick={() => { if (id === "chat") { openChat(); } else { setTab(id); } }}
-                style={{
-                  flex: 1, display: "flex", flexDirection: "column",
-                  alignItems: "center", gap: 2, padding: "10px 0",
-                  fontSize: 10, fontWeight: 500, border: "none", background: "none",
-                  cursor: "pointer", fontFamily: "inherit",
-                  color: tab === id ? C.accent : "#9ca3af",
-                  transition: "color 0.15s",
-                }}
-              >
-                <TabIcon />
-                {label}
-              </button>
-            ))}
-          </div>
-
+          </>
+        )}
         </div>
       )}
     </div>
