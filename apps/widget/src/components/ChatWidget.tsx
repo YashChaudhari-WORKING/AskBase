@@ -319,11 +319,18 @@ export function ChatWidget({ apiKey, apiUrl = "http://localhost:4000/api" }: { a
         headers: { "Content-Type": "application/json", "x-api-key": apiKey },
         body: JSON.stringify({ content: raw, conversationId: convId ?? undefined }),
       });
+      if (!res.ok) throw new Error(String(res.status));
       const data = await res.json(); const d = data?.data ?? data;
       if (d?.conversationId) setConvId(d.conversationId);
-      if (d?.action === "invoke_flow" && d?.flowId) { await startFlow(d.flowId); }
-      else { addBotMsg(d?.message?.content ?? d?.content ?? "…"); }
-    } catch { addBotMsg("Something went wrong. Try again."); }
+      if (d?.action === "invoke_flow" && d?.flowId) {
+        await startFlow(d.flowId);
+      } else {
+        const reply = (d?.message?.content ?? d?.content ?? "").toString().trim();
+        addBotMsg(reply && reply !== "__flow_trigger__"
+          ? reply
+          : "Sorry, I couldn't generate a response just now. Please try rephrasing or ask again.");
+      }
+    } catch { addBotMsg("I'm having trouble connecting right now. Please try again in a moment."); }
     finally { setSending(false); }
   }
 

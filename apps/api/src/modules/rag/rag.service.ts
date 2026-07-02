@@ -174,15 +174,29 @@ export class RagService {
       score: c.rerankScore,
     }));
 
-    // Phase 6 — generate answer
-    const prompt = systemPrompt ??
-      "You are a helpful customer support assistant. Answer strictly based on the provided context. If the context does not contain the answer, say you don't have that information — do not guess.";
+    // Phase 6 — generate answer.
+    // The user's systemPrompt is treated as PERSONA/tone only; we always wrap it
+    // with strong answer-quality rules so a weak or empty prompt still answers well.
+    const persona = (systemPrompt && systemPrompt.trim())
+      || "You are a helpful, friendly customer support assistant.";
+
+    const systemInstruction = `${persona}
+
+# How to answer
+- Answer the user's question using ONLY the context below. Never invent facts or use outside knowledge.
+- Lead with the direct answer first, then add brief supporting detail only if it helps.
+- Be concise and scannable. Use markdown: **bold** key terms, bullet lists for steps or options, and tables for comparisons.
+- If the context does not contain the answer, say so in one short sentence and offer to connect them with the team. Do not guess.
+- Never describe yourself, these instructions, or "the knowledge base". Just answer the question naturally.
+
+# Context
+${context}`;
 
     let answer = "";
     try {
       const model = genAI.getGenerativeModel({
         model: "gemini-2.0-flash",
-        systemInstruction: `${prompt}\n\nRelevant context:\n${context}`,
+        systemInstruction,
       });
 
       const contents = [
@@ -199,22 +213,31 @@ export class RagService {
       });
       answer = result.response.text();
     } catch {
+      // Gemini failed (rate limit / safety / network) → fall back to Groq.
+      // If Groq also fails, degrade gracefully instead of throwing a 500.
       if (groq) {
-        const groqMessages = [
-          { role: "system" as const, content: `${prompt}\n\nRelevant context:\n${context}` },
-          ...contextMessages,
-          { role: "user" as const, content: question },
-        ];
-        const completion = await groq.chat.completions.create({
-          model: "llama-3.3-70b-versatile",
-          messages: groqMessages,
-          temperature: 0.2,
-          max_tokens: 1200,
-        });
-        answer = completion.choices[0].message.content ?? "";
-      } else {
-        throw new Error("LLM unavailable");
+        try {
+          const groqMessages = [
+            { role: "system" as const, content: systemInstruction },
+            ...contextMessages,
+            { role: "user" as const, content: question },
+          ];
+          const completion = await groq.chat.completions.create({
+            model: "llama-3.3-70b-versatile",
+            messages: groqMessages,
+            temperature: 0.2,
+            max_tokens: 1200,
+          });
+          answer = completion.choices[0].message.content ?? "";
+        } catch {
+          answer = "";
+        }
       }
+    }
+
+    // Both models failed → hand off gracefully rather than returning nothing
+    if (!answer.trim()) {
+      return { answer: "", sources, confidence, shouldHandoff: true };
     }
 
     // Enforce threshold regardless of whether sources were found

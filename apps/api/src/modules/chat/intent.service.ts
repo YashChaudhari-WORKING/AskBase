@@ -78,8 +78,8 @@ ${flowIdField}
 
 Intent rules — default to rag_query when unsure:
 - rag_query: ANY question or topic answerable from documents. Includes vague requests like "tell me more", "what do you offer", "pricing", "how it works". If it has a noun or topic word, it is rag_query.
-- flow_trigger: user's message matches one of the available flow triggers listed above. When matched, set flowId to the matching flow's id.
-- greeting: ONLY pure greetings or small talk — "hi", "hello", "thanks", "bye". Zero information need.
+- flow_trigger: ONLY when the user is clearly asking to PERFORM the specific action of a flow (e.g. actually wants to book/schedule/submit a request right now), AND their wording closely matches a trigger. Do NOT return flow_trigger just because the message mentions a related word. If they are asking a QUESTION about the topic — e.g. "what does a consultation cost?", "how does booking work?", "can you tell me about your services?" — that is rag_query, NOT flow_trigger. When genuinely triggered, set flowId to the matching flow's id.
+- greeting: ONLY pure greetings or small talk — "hi", "hello", "thanks", "bye". Zero information need. Keep directReply to ONE short, warm sentence — never describe yourself or the knowledge base.
 - handoff_request: user EXPLICITLY asks for a human — "talk to a person", "connect me to agent", "speak to human". Do NOT use this if they are just asking a question or requesting a service.
 - out_of_scope: ONLY if completely unrelated to any conceivable business topic (sports, politics, recipes).
 - clarification: ONLY standalone pronouns with NO topic — "what about it?", "that one". If message has ANY noun, use rag_query.
